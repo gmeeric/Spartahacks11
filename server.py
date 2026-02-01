@@ -7,95 +7,23 @@ import random
 app = Flask(__name__)
 CORS(app)
 
-# Try to import ChatAgent, but use mock if it fails
-try:
-    from chat import ChatAgent
-    USE_REAL_AI = True
-    print("✓ ChatAgent imported successfully")
-except Exception as e:
-    print(f"⚠ Could not import ChatAgent: {e}")
-    print("⚠ Using mock AI responses for testing")
-    USE_REAL_AI = False
-    
-    # Mock ChatAgent for testing
-    class ChatAgent:
-        def __init__(self, api_key, name, personality):
-            self.name = name
-            self.personality = personality
-        
-        def respond(self, message):
-            # Intelligent mock responses based on game state
-            actions = ["Produce", "Influence", "Invade", "Propagandize", "Nuke"]
-            weights = [30, 20, 25, 15, 10]  # Weighted probability
-            
-            # Parse the message to make smarter decisions
-            if "resources=" in message:
-                try:
-                    # Extract this agent's resources
-                    lines = message.split('\n')
-                    for line in lines:
-                        if self.name in line and "resources=" in line:
-                            resources = int(line.split("resources=")[1].split(",")[0])
-                            # If close to 8 resources, try to nuke
-                            if resources >= 8:
-                                return {
-                                    "action": "Nuke",
-                                    "explanation": "Eliminating strongest threat"
-                                }
-                            elif resources >= 6:
-                                weights = [10, 5, 10, 5, 70]  # Heavy bias toward Nuke
-                except:
-                    pass
-            
-            action = random.choices(actions, weights=weights)[0]
-            
-            explanations = {
-                "Produce": [
-                    "Building resources for future attacks",
-                    "Stockpiling for nuke capability",
-                    "Need more resources to strike"
-                ],
-                "Influence": [
-                    "Increasing power base for invasions",
-                    "Building influence to attack soon",
-                    "Preparing for aggressive plays"
-                ],
-                "Invade": [
-                    "Weakening strongest opponent",
-                    "Stealing to prevent enemy nuke",
-                    "Crippling rival's resources"
-                ],
-                "Propagandize": [
-                    "Undermining opponent influence",
-                    "Stealing power from threats",
-                    "Weakening enemy capabilities"
-                ],
-                "Nuke": [
-                    "Eliminating major threat",
-                    "Removing strongest competitor",
-                    "Securing path to victory"
-                ]
-            }
-            
-            return {
-                "action": action,
-                "explanation": random.choice(explanations[action])
-            }
+# Import ChatAgent - no fallback, real AI only
+from chat import ChatAgent
 
-API_KEY = "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"
+API_KEY = "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"
 
-# 10 personalities
+# 10 distinct personalities for AI agents
 PERSONALITIES = [
-    "optimistic, curious, loves new ideas",
-    "skeptical, analytical, questions everything",
-    "aggressive, risk-taking, bold",
-    "strategic, calculating, patient",
-    "manipulative, clever, subtle",
-    "cautious, defensive, careful",
-    "greedy, selfish, opportunistic",
-    "cooperative but self-interested",
-    "chaotic, unpredictable, reckless",
-    "competitive, ambitious, focused"
+    "aggressive and decisive, strikes first",
+    "calculating and patient, waits for perfect moment",
+    "paranoid and defensive, fears being nuked",
+    "greedy and opportunistic, steals resources aggressively",
+    "diplomatic but ruthless, builds then strikes",
+    "chaotic and unpredictable, takes big risks",
+    "analytical and methodical, optimizes every move",
+    "vengeful and reactive, retaliates against attackers",
+    "ambitious and competitive, always pushes for dominance",
+    "cunning and deceptive, hides true intentions"
 ]
 
 game_session = {
@@ -108,7 +36,7 @@ game_session = {
     "human_action": None   # Action chosen by human
 }
 
-# ------------------- Helper -------------------
+# ------------------- Helper Functions -------------------
 
 def get_valid_targets_for_invade(name, state):
     """Get list of agents that have resources to steal"""
@@ -183,8 +111,8 @@ def can_perform_action(name, action, state):
     
     return False, "Unknown action"
 
-def apply_action(name, action, state):
-    """Apply an agent's action to the game state"""
+def apply_action(name, action, target, state):
+    """Apply an agent's action to the game state with specified target"""
     agents_state = state["agents"]
     if not agents_state[name]["alive"]:
         return None
@@ -201,30 +129,150 @@ def apply_action(name, action, state):
         
     elif action == "Invade":
         agents_state[name]["influence"] -= 1
+        
+        # Use AI-specified target if valid, otherwise random
         valid_targets = get_valid_targets_for_invade(name, state)
-        target = random.choice(valid_targets)
-        stolen = min(2, agents_state[target]["resources"])
-        agents_state[target]["resources"] -= stolen
+        if target and target in valid_targets:
+            chosen_target = target
+        elif valid_targets:
+            chosen_target = random.choice(valid_targets)
+        else:
+            return "tried to invade but no valid targets"
+        
+        stolen = min(2, agents_state[chosen_target]["resources"])
+        agents_state[chosen_target]["resources"] -= stolen
         agents_state[name]["resources"] += stolen
-        result_message = f"invaded {target} and stole {stolen} resources"
+        result_message = f"invaded {chosen_target} and stole {stolen} resources"
             
     elif action == "Propagandize":
         agents_state[name]["resources"] -= 1
+        
+        # Use AI-specified target if valid, otherwise random
         valid_targets = get_valid_targets_for_propagandize(name, state)
-        target = random.choice(valid_targets)
-        stolen = min(1, agents_state[target]["influence"])
-        agents_state[target]["influence"] -= stolen
+        if target and target in valid_targets:
+            chosen_target = target
+        elif valid_targets:
+            chosen_target = random.choice(valid_targets)
+        else:
+            return "tried to propagandize but no valid targets"
+        
+        stolen = min(1, agents_state[chosen_target]["influence"])
+        agents_state[chosen_target]["influence"] -= stolen
         agents_state[name]["influence"] += stolen
-        result_message = f"propagandized against {target} and stole {stolen} influence"
+        result_message = f"propagandized against {chosen_target} and stole {stolen} influence"
             
     elif action == "Nuke":
         agents_state[name]["resources"] -= 8
+        
+        # Use AI-specified target if valid, otherwise random
         valid_targets = get_valid_targets_for_nuke(name, state)
-        target = random.choice(valid_targets)
-        agents_state[target]["alive"] = False
-        result_message = f"NUKED {target} - they are eliminated!"
+        if target and target in valid_targets:
+            chosen_target = target
+        elif valid_targets:
+            chosen_target = random.choice(valid_targets)
+        else:
+            return "tried to nuke but no valid targets"
+        
+        agents_state[chosen_target]["alive"] = False
+        result_message = f"NUKED {chosen_target} - they are eliminated!"
     
     return result_message
+
+def build_strategic_prompt(name, state, conversation, last_seen_index, include_error=None):
+    """Build a detailed strategic prompt for the AI agent"""
+    agents_state = state["agents"]
+    
+    prompt = f"=== TURN {state['turn']} STRATEGIC ANALYSIS ===\n\n"
+    
+    # Your current status
+    my_stats = agents_state[name]
+    prompt += f"YOUR STATUS ({name}):\n"
+    prompt += f"  Resources: {my_stats['resources']} (need 8 to nuke)\n"
+    prompt += f"  Influence: {my_stats['influence']} (spend 1 to invade)\n"
+    prompt += f"  Status: {'ALIVE' if my_stats['alive'] else 'ELIMINATED'}\n\n"
+    
+    # Show what I've been doing (last 3 actions)
+    my_recent_actions = [
+        msg for msg in conversation[max(0, len(conversation)-15):]
+        if msg.get('speaker') == name and msg.get('speaker') != 'System'
+    ]
+    if my_recent_actions:
+        prompt += f"YOUR RECENT ACTIONS:\n"
+        for msg in my_recent_actions[-3:]:
+            action_text = msg['message'].split('—')[0].strip()
+            prompt += f"  - {action_text}\n"
+        prompt += "\n"
+    
+    # Threat assessment with what they're doing
+    prompt += "OPPONENT ANALYSIS (sorted by danger):\n"
+    alive_opponents = [
+        (n, s) for n, s in agents_state.items() 
+        if n != name and s["alive"]
+    ]
+    # Sort by resources (most dangerous first)
+    alive_opponents.sort(key=lambda x: x[1]["resources"], reverse=True)
+    
+    for opponent_name, stats in alive_opponents:
+        threat_level = ""
+        if stats["resources"] >= 8:
+            threat_level = "🚨 CAN NUKE YOU NOW!"
+        elif stats["resources"] >= 6:
+            threat_level = "⚠️ HIGH THREAT - Close to nuke"
+        elif stats["resources"] >= 4:
+            threat_level = "⚡ MEDIUM THREAT"
+        else:
+            threat_level = "Low threat"
+        
+        # Show what this opponent has been doing
+        opponent_actions = [
+            msg for msg in conversation[max(0, len(conversation)-12):]
+            if msg.get('speaker') == opponent_name and msg.get('speaker') != 'System'
+        ]
+        recent_strategy = "Unknown"
+        if opponent_actions:
+            last_action = opponent_actions[-1]['message'].split('—')[0].strip()
+            recent_strategy = last_action
+        
+        prompt += f"  {opponent_name}: R={stats['resources']}, I={stats['influence']} | {threat_level}\n"
+        prompt += f"    Recent: {recent_strategy}\n"
+    
+    prompt += f"\nAlive opponents: {len(alive_opponents)}\n\n"
+    
+    # Action availability
+    prompt += "YOUR AVAILABLE ACTIONS:\n"
+    for action in ["Produce", "Influence", "Invade", "Propagandize", "Nuke"]:
+        can_do, reason = can_perform_action(name, action, state)
+        status = "✓ AVAILABLE" if can_do else f"✗ {reason}"
+        prompt += f"  {action}: {status}\n"
+    
+    # Error feedback if retrying
+    if include_error:
+        prompt += f"\n⚠️ PREVIOUS ACTION INVALID: {include_error}\n"
+        prompt += "Choose a different action that you can afford.\n"
+    
+    # Strategic advice based on game state
+    prompt += "\n=== STRATEGIC SITUATION ===\n"
+    
+    # Check if everyone is just building influence
+    all_recent_actions = [
+        msg['message'] for msg in conversation[-len(alive_opponents)*2:]
+        if msg.get('speaker') not in ['System', name]
+    ]
+    influence_heavy = sum(1 for msg in all_recent_actions if 'Influence' in msg)
+    if influence_heavy > len(alive_opponents):
+        prompt += "⚠️ WARNING: Everyone is just building influence! This is inefficient.\n"
+        prompt += "Consider INVADING to actually steal resources and get ahead!\n"
+    
+    if my_stats['influence'] >= 2:
+        prompt += f"💡 You have {my_stats['influence']} influence - enough to INVADE multiple times!\n"
+        prompt += "Invasions steal resources efficiently. Consider attacking!\n"
+    
+    prompt += "\n=== YOUR DECISION ===\n"
+    prompt += "Make a decision that matches YOUR PERSONALITY.\n"
+    prompt += "Don't just copy what others are doing - play to your character!\n"
+    prompt += "Remember: You must be the LAST agent alive to win!\n"
+    
+    return prompt
 
 # ------------------- Game Loop -------------------
 
@@ -307,6 +355,7 @@ def run_game(num_agents, has_human):
                 if game_session["human_action"] is None:
                     # Timeout - auto produce
                     chosen_action = "Produce"
+                    chosen_target = None
                     explanation = "Timeout - auto produced"
                     conversation.append({
                         "speaker": "System",
@@ -316,6 +365,7 @@ def run_game(num_agents, has_human):
                 else:
                     chosen_action = game_session["human_action"]
                     explanation = "Human choice"
+                    chosen_target = None  # Humans don't specify targets (random for now)
                 
                 # Validate action
                 can_perform, error_message = can_perform_action(name, chosen_action, state)
@@ -328,76 +378,80 @@ def run_game(num_agents, has_human):
                     })
                     chosen_action = "Produce"
                     explanation = "Invalid action - auto produced"
+                    chosen_target = None
                 
             else:
                 # AI agent
                 agent = game_session["agents"][name]
                 
-                # Skip if agent is None (shouldn't happen for AI, but safety check)
-                if agent is None:
-                    print(f"✗ Error: AI agent {name} is None")
-                    chosen_action = "Produce"
-                    explanation = "Error - agent is None"
-                else:
-                    # Build state summary for AI
-                    def build_state_summary(include_error=None):
-                        new_messages = conversation[last_seen_index[name]:]
-                        state_summary = f"Turn {state['turn']}\n\n"
-                        state_summary += "Current Status:\n"
-                        for n, info in state["agents"].items():
-                            alive_text = "Alive" if info["alive"] else "Dead"
-                            state_summary += f"  {n}: resources={info['resources']}, influence={info['influence']}, {alive_text}\n"
+                # Try to get a valid action (with retries)
+                max_retries = 3
+                chosen_action = None
+                chosen_target = None
+                explanation = None
+                error_message = None
+                
+                for attempt in range(max_retries):
+                    try:
+                        # Build strategic prompt
+                        strategic_prompt = build_strategic_prompt(
+                            name, state, conversation, last_seen_index[name], 
+                            include_error=error_message if attempt > 0 else None
+                        )
                         
-                        if include_error:
-                            state_summary += f"\n⚠️ INVALID ACTION: {include_error}\n"
-                            state_summary += "You must choose a different action that you can afford.\n\n"
+                        print(f"\n{'='*60}")
+                        print(f"Prompting {name} (attempt {attempt+1}/{max_retries}):")
+                        print(f"{'='*60}")
+                        if attempt == 0:
+                            print(strategic_prompt[:500] + "..." if len(strategic_prompt) > 500 else strategic_prompt)
                         
-                        if new_messages:
-                            state_summary += "\nRecent actions:\n"
-                            for msg in new_messages[-5:]:  # Last 5 messages
-                                state_summary += f"  {msg['speaker']}: {msg['message']}\n"
+                        # Get AI response
+                        result = agent.respond(strategic_prompt)
+                        chosen_action = result["action"]
+                        chosen_target = result.get("target", None)
+                        explanation = result["explanation"]
                         
-                        return state_summary
-
-                    # Try to get a valid action (with retries)
-                    max_retries = 3
-                    chosen_action = None
-                    explanation = None
-                    
-                    for attempt in range(max_retries):
-                        try:
-                            # Build state summary (with error message if retrying)
-                            if attempt == 0:
-                                state_summary = build_state_summary()
-                            else:
-                                state_summary = build_state_summary(include_error=error_message)
+                        print(f"AI Response: {chosen_action}" + (f" targeting {chosen_target}" if chosen_target else "") + f" - {explanation}")
+                        
+                        # Check if action is valid
+                        can_perform, error_message = can_perform_action(name, chosen_action, state)
+                        
+                        if can_perform:
+                            # Validate target if action requires one
+                            if chosen_action in ["Invade", "Propagandize", "Nuke"]:
+                                valid_targets = []
+                                if chosen_action == "Invade":
+                                    valid_targets = get_valid_targets_for_invade(name, state)
+                                elif chosen_action == "Propagandize":
+                                    valid_targets = get_valid_targets_for_propagandize(name, state)
+                                elif chosen_action == "Nuke":
+                                    valid_targets = get_valid_targets_for_nuke(name, state)
+                                
+                                # If target is invalid or missing, it will be random (handled in apply_action)
+                                if chosen_target and chosen_target not in valid_targets:
+                                    print(f"⚠️ Invalid target {chosen_target}, will choose randomly from {valid_targets}")
+                                    chosen_target = None
                             
-                            result = agent.respond(state_summary)
-                            chosen_action = result["action"]
-                            explanation = result["explanation"]
-                            
-                            # Check if action is valid
-                            can_perform, error_message = can_perform_action(name, chosen_action, state)
-                            
-                            if can_perform:
-                                print(f"✓ {name} chose: {chosen_action} - {explanation}")
-                                break
-                            else:
-                                print(f"⚠ {name} tried {chosen_action} but: {error_message}. Retry {attempt + 1}/{max_retries}")
-                                if attempt == max_retries - 1:
-                                    # Last retry failed, force Produce
-                                    print(f"✗ {name} failed all retries, forcing Produce")
-                                    chosen_action = "Produce"
-                                    explanation = "Forced to produce after invalid action attempts"
-                        
-                        except Exception as e:
-                            print(f"✗ Error getting response from {name}: {e}")
-                            chosen_action = "Produce"
-                            explanation = "Error occurred, defaulting to Produce"
+                            print(f"✓ Valid action accepted")
                             break
+                        else:
+                            print(f"✗ Invalid: {error_message}")
+                            if attempt == max_retries - 1:
+                                # Last retry failed, force Produce
+                                print(f"✗ {name} failed all retries, forcing Produce")
+                                chosen_action = "Produce"
+                                chosen_target = None
+                                explanation = "Forced to produce after invalid attempts"
+                    
+                    except Exception as e:
+                        print(f"✗ Error getting response from {name}: {e}")
+                        chosen_action = "Produce"
+                        chosen_target = None
+                        explanation = f"Error: {str(e)[:30]}"
+                        break
 
             # Apply action (we know it's valid now)
-            action_result = apply_action(name, chosen_action, state)
+            action_result = apply_action(name, chosen_action, chosen_target, state)
 
             # Add to conversation
             message_text = f"{chosen_action}"
@@ -413,8 +467,13 @@ def run_game(num_agents, has_human):
             })
             last_seen_index[name] = len(conversation)
 
-            # Slow down so UI can keep up
-            time.sleep(1.5)
+            # Delay between agents to avoid rate limits
+            # - 0.5s between AI agents (reduces simultaneous API calls)
+            # - 1.5s after last agent before next turn (UI readability)
+            if name != agent_names[-1] or not state["agents"][agent_names[-1]]["alive"]:
+                time.sleep(0.5)  # Brief pause between agents
+            else:
+                time.sleep(1.5)  # Longer pause before next turn
 
         state["turn"] += 1
 
@@ -480,16 +539,12 @@ def start_game_route():
             name = f"Agent{i}"
             personality = PERSONALITIES[(i-1) % len(PERSONALITIES)]
             
-            try:
-                game_session["agents"][name] = ChatAgent(
-                    api_key=API_KEY,
-                    name=name,
-                    personality=personality
-                )
-                print(f"✓ Created {name} with personality: {personality}")
-            except Exception as e:
-                print(f"✗ Error creating {name}: {e}")
-                return jsonify({"error": f"Failed to create agent {name}: {str(e)}"}), 500
+            game_session["agents"][name] = ChatAgent(
+                api_key=API_KEY,
+                name=name,
+                personality=personality
+            )
+            print(f"✓ Created {name} with personality: {personality}")
             
             game_session["game_state"]["agents"][name] = {
                 "resources": 0,
@@ -500,15 +555,13 @@ def start_game_route():
         game_session["running"] = True
         threading.Thread(target=run_game, args=(num_agents, include_human), daemon=True).start()
 
-        ai_type = "Real Groq AI" if USE_REAL_AI else "Mock AI (for testing)"
-        print(f"✓ Game started with {num_agents} agents (human: {include_human}) using {ai_type}")
+        print(f"✓ Game started with {num_agents} agents (human: {include_human}) using Real Groq AI")
         
         return jsonify({
             "status": "Game started!", 
             "num_agents": num_agents,
             "has_human": include_human,
-            "human_name": game_session["human_player"],
-            "ai_type": ai_type
+            "human_name": game_session["human_player"]
         })
     
     except Exception as e:
@@ -569,10 +622,7 @@ if __name__ == '__main__':
     print("\n" + "="*50)
     print("🎮 AI BATTLEGROUND SERVER")
     print("="*50)
-    if USE_REAL_AI:
-        print("✓ Using Real Groq AI")
-    else:
-        print("⚠ Using Mock AI (install groq package for real AI)")
+    print("✓ Using Real Groq AI")
     print("="*50 + "\n")
     
     app.run(debug=True, port=5001, threaded=True)
