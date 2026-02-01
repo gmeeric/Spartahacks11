@@ -18,12 +18,17 @@ if API_KEYS_ENV:
     API_KEYS = [key.strip() for key in API_KEYS_ENV.split(',') if key.strip()]
 else:
     # Fallback for local development - REPLACE WITH YOUR KEYS
+    # Load multiple Groq API keys from environment variables
     API_KEYS = [
-        "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",
-        "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",
-        "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",
-        "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"
+        os.environ.get("groq_key_1"),
+        os.environ.get("groq_key_2"),
+        os.environ.get("groq_key_3"),
+        os.environ.get("groq_key_4")
     ]
+
+API_KEYS = [key for key in API_KEYS if key]
+
+print(f"Loaded {len(API_KEYS)} Groq API key(s)")
 
 current_key_index = 0
 
