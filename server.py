@@ -503,6 +503,9 @@ def run_game(num_agents, has_human):
                     chosen_action = "Produce"
                     explanation = "Invalid - auto produced"
                     chosen_target = None
+                
+                # Initialize human contribution to 0 (will be set in contribution phase)
+                round_contributions[human_name] = 0
                     
             else:
                 # Handle AI action
@@ -519,6 +522,7 @@ def run_game(num_agents, has_human):
                     explanation = result["explanation"]
 
                     contribution_explanation = result.get("contribution_explanation", "Strategic decision")
+                    contribution_explanations[name] = contribution_explanation
                     
                     can_perform, error_message = can_perform_action(name, chosen_action, state)
                     if not can_perform:
@@ -538,6 +542,7 @@ def run_game(num_agents, has_human):
                     chosen_target = None
                     explanation = "Error"
                     round_contributions[name] = 0
+                    contribution_explanations[name] = "Error"
             
             # Apply action
             action_result = apply_action(name, chosen_action, chosen_target, state)
@@ -557,7 +562,6 @@ def run_game(num_agents, has_human):
                 "time": time.time()
             })
             
-
             # 3 second delay after each agent's action
             time.sleep(TURN_DELAY)
         
@@ -598,6 +602,7 @@ def run_game(num_agents, has_human):
                 contribution = max(0, min(contribution, max_contrib))
                 round_contributions[human_name] = contribution
                 contrib_message = "Human choice"
+                contribution_explanations[human_name] = contrib_message
             else:
                 # AI contribution was already decided during action phase
                 contribution = round_contributions.get(name, 0)
@@ -617,7 +622,7 @@ def run_game(num_agents, has_human):
             # 3 second delay after each contribution
             time.sleep(TURN_DELAY)
         
-        # Determine round leader
+        # Determine round leader (OUTSIDE the contribution loop)
         if round_contributions:
             max_contribution = max(round_contributions.values())
             if max_contribution > 0:
@@ -665,3 +670,179 @@ def run_game(num_agents, has_human):
         "message": "=== BATTLE CONCLUDED ===",
         "time": time.time()
     })
+
+# ------------------- Flask Routes -------------------
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/api/start', methods=['POST'])
+def start_game_route():
+    try:
+        data = request.json
+        num_agents = int(data.get("num_agents", 10))
+        include_human = data.get("include_human", False)
+        
+        if num_agents < 2 or num_agents > 10:
+            return jsonify({"error": "Number of agents must be between 2 and 10"}), 400
+
+        game_session["running"] = False
+        time.sleep(0.5)
+
+        game_session["conversation"] = []
+        game_session["agents"] = {}
+        game_session["agent_memory"] = {}
+        game_session["human_player"] = None
+        game_session["waiting_for_human"] = False
+        game_session["human_action"] = None
+        game_session["human_target"] = None
+        game_session["waiting_for_contribution"] = False
+        game_session["human_contribution"] = None
+        game_session["num_starting_agents"] = num_agents
+        game_session["game_state"] = {
+            "turn": 1,
+            "max_turns": 30,
+            "agents": {},
+            "project_total": 0,
+            "project_leader": None,
+            "available_seats": 0,
+            "num_starting_agents": num_agents
+        }
+
+        available_personalities = PERSONALITIES.copy()
+        random.shuffle(available_personalities)
+        
+        if include_human:
+            name = "Human"
+            game_session["human_player"] = name
+            game_session["agents"][name] = None
+            game_session["game_state"]["agents"][name] = {
+                "resources": 0,
+                "influence": 0,
+                "alive": True
+            }
+            print(f"✓ Created {name} as HUMAN PLAYER")
+        
+        num_ai_agents = num_agents - (1 if include_human else 0)
+        for i in range(num_ai_agents):
+            personality_data = available_personalities[i % len(available_personalities)]
+            name = personality_data["name"]
+            personality_desc = personality_data["description"]
+            
+            api_key = get_next_api_key()
+            
+            game_session["agents"][name] = ChatAgent(
+                api_key=api_key,
+                name=name,
+                personality=personality_desc
+            )
+            print(f"✓ Created {name}")
+            
+            game_session["game_state"]["agents"][name] = {
+                "resources": 0,
+                "influence": 0,
+                "alive": True
+            }
+
+        game_session["running"] = True
+        threading.Thread(target=run_game, args=(num_agents, include_human), daemon=True).start()
+
+        print(f"✓ Game started - SEQUENTIAL VERSION")
+        
+        return jsonify({
+            "status": "Game started!", 
+            "num_agents": num_agents,
+            "has_human": include_human,
+            "human_name": game_session["human_player"]
+        })
+    
+    except Exception as e:
+        print(f"✗ Error starting game: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/conversation')
+def get_conversation():
+    return jsonify({
+        "conversation": game_session.get("conversation", []),
+        "running": game_session.get("running", False)
+    })
+
+@app.route('/api/game_state')
+def get_game_state():
+    state = game_session.get("game_state", {})
+    agents_state = state.get("agents", {})
+    return jsonify({
+        "agents": agents_state,
+        "turn": state.get("turn", 1),
+        "max_turns": state.get("max_turns", 30),
+        "running": game_session.get("running", False),
+        "waiting_for_human": game_session.get("waiting_for_human", False),
+        "waiting_for_contribution": game_session.get("waiting_for_contribution", False),
+        "human_player": game_session.get("human_player", None),
+        "project_total": state.get("project_total", 0),
+        "project_leader": state.get("project_leader", None),
+        "available_seats": state.get("available_seats", 0),
+        "num_starting_agents": state.get("num_starting_agents", 0)
+    })
+
+@app.route('/api/human_action', methods=['POST'])
+def submit_human_action():
+    try:
+        data = request.json
+        action = data.get("action")
+        target = data.get("target", None)
+        
+        if action not in ["Produce", "Influence", "Invade", "Propagandize", "Nuke"]:
+            return jsonify({"error": "Invalid action"}), 400
+        
+        if not game_session.get("waiting_for_human", False):
+            return jsonify({"error": "Not waiting for human input"}), 400
+        
+        game_session["human_action"] = action
+        game_session["human_target"] = target
+        print(f"✓ Human: {action}" + (f" -> {target}" if target else ""))
+        
+        return jsonify({"status": "Action submitted", "action": action, "target": target})
+    
+    except Exception as e:
+        print(f"✗ Error submitting human action: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/human_contribution', methods=['POST'])
+def submit_human_contribution():
+    try:
+        data = request.json
+        contribution = int(data.get("contribution", 0))
+        
+        if contribution < 0:
+            return jsonify({"error": "Contribution must be non-negative"}), 400
+        
+        if not game_session.get("waiting_for_contribution", False):
+            return jsonify({"error": "Not waiting for contribution input"}), 400
+        
+        game_session["human_contribution"] = contribution
+        print(f"✓ Human contributed: {contribution}")
+        
+        return jsonify({"status": "Contribution submitted", "contribution": contribution})
+    
+    except Exception as e:
+        print(f"✗ Error submitting human contribution: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/stop', methods=['POST'])
+def stop_game():
+    game_session["running"] = False
+    return jsonify({"status": "Game stopped"})
+
+if __name__ == '__main__':
+    print("\n" + "="*50)
+    print("🎮 AI BATTLEGROUND - SEQUENTIAL EDITION")
+    print("="*50)
+    print("✓ 3 second delay between each agent")
+    print("✓ One AI call at a time")
+    print("✓ Actions → Contributions (sequential)")
+    print("="*50 + "\n")
+    
+    port = int(os.environ.get('PORT', 5001))
+    app.run(host='0.0.0.0', port=port, threaded=True)
