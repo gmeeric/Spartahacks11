@@ -104,67 +104,7 @@ Respond ONLY in JSON:
             }
 
 # =========================================================
-# GAME STATE
-# =========================================================
-
-game = {
-    "running": False,
-    "turn": 1,
-    "agents": {},
-    "log": [],
-    "project_total": 0,
-    "num_starting_agents": 0
-}
-
-state_lock = threading.Lock()
-
-def rocket_seats():
-    return min(8, game["project_total"] // 10)
-
-# =========================================================
-# GAME LOGIC
-# =========================================================
-
-def apply_action(name, action, target):
-    actor = game["agents"][name]
-
-    if not actor["alive"]:
-        return "is eliminated."
-
-    if action == "Produce":
-        actor["resources"] += 2
-        return "produced 2 resources."
-
-    if action == "Influence":
-        actor["influence"] += 1
-        return "gained influence."
-
-    if action == "Invade" and actor["influence"] >= 1:
-        if target in game["agents"] and game["agents"][target]["alive"]:
-            actor["influence"] -= 1
-            stolen = min(2, game["agents"][target]["resources"])
-            game["agents"][target]["resources"] -= stolen
-            actor["resources"] += stolen
-            return f"invaded {target}, stole {stolen} resources."
-
-    if action == "Propagandize" and actor["resources"] >= 1:
-        if target in game["agents"] and game["agents"][target]["alive"]:
-            actor["resources"] -= 1
-            stolen = min(1, game["agents"][target]["influence"])
-            game["agents"][target]["influence"] -= stolen
-            actor["influence"] += stolen
-            return f"propagandized {target}, stole influence."
-
-    if action == "Nuke" and actor["resources"] >= 8:
-        if target in game["agents"] and game["agents"][target]["alive"]:
-            actor["resources"] -= 8
-            game["agents"][target]["alive"] = False
-            return f"NUKED {target} ☢️"
-
-    return "failed to act."
-
-# =========================================================
-# GAME LOOP (ACTIONS → CONTRIBUTIONS)
+# GAME LOOP (SEQUENTIAL AI TURNS → CONTRIBUTION PHASE)
 # =========================================================
 
 def game_loop():
@@ -185,28 +125,39 @@ def game_loop():
                 "message": f"--- Turn {game['turn']} ---"
             })
 
-        # ===== PHASE 1: ACTIONS =====
+        # ===== PHASE 1: SEQUENTIAL AI ACTIONS =====
+        # Each AI gets their turn one at a time
         planned = {}
+        
+        # Get list of alive agents at start of turn
+        with state_lock:
+            alive_agents = [(name, agent_data) for name, agent_data in game["agents"].items() if agent_data["alive"]]
 
-        for name, agent_data in game["agents"].items():
-            if not agent_data["alive"]:
-                continue
-
+        for name, agent_data in alive_agents:
+            # Skip if agent died during this turn
+            with state_lock:
+                if not game["agents"][name]["alive"]:
+                    continue
+            
             agent = agent_data["agent"]
 
-            prompt = f"""
+            # Build prompt with current state
+            with state_lock:
+                prompt = f"""
 STATE:
 You: {name}
-Resources: {agent_data['resources']}
-Influence: {agent_data['influence']}
+Resources: {game["agents"][name]['resources']}
+Influence: {game["agents"][name]['influence']}
 Alive players: {[n for n,a in game['agents'].items() if a['alive']]}
 Project total: {game['project_total']}
 Rocket seats: {rocket_seats()}
 """
 
+            # Get AI decision
             decision = agent.respond(prompt)
             planned[name] = decision
 
+            # Apply action immediately and log
             with state_lock:
                 outcome = apply_action(
                     name,
@@ -219,16 +170,22 @@ Rocket seats: {rocket_seats()}
                     "message": f"{decision['action']} → {outcome}"
                 })
 
+            # Delay before next AI's turn (visible pacing)
             time.sleep(TURN_DELAY_SECONDS)
 
-        # ===== PHASE 2: CONTRIBUTIONS =====
+        # ===== PHASE 2: CONTRIBUTION PHASE =====
+        # After all AIs have acted, handle contributions
         with state_lock:
             game["log"].append({
                 "speaker": "System",
-                "message": "💰 Contributions to the Project:"
+                "message": "💰 Contribution Phase:"
             })
 
             for name, decision in planned.items():
+                # Check if agent still exists and is alive
+                if name not in game["agents"]:
+                    continue
+                    
                 agent_data = game["agents"][name]
                 if not agent_data["alive"]:
                     continue
@@ -242,6 +199,12 @@ Rocket seats: {rocket_seats()}
                         "speaker": name,
                         "message": f"contributed {contrib} resources"
                     })
+
+            # End of turn summary
+            game["log"].append({
+                "speaker": "System",
+                "message": f"Project Total: {game['project_total']} | Seats: {rocket_seats()}"
+            })
 
         with state_lock:
             game["turn"] += 1
