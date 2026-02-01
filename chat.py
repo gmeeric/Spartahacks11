@@ -36,8 +36,25 @@ THE PROJECT (Shared Resource Pool):
 - All agents can contribute resources to THE PROJECT each turn
 - Total project resources determine how many ROCKET SEATS are available
 - More resources = more seats = easier for everyone to win
-- The agent who contributes MOST each round becomes LEADER (+1 influence, goes first)
+- The agent who contributes MOST each round becomes LEADER (+1 influence as a bonus)
 - This creates a dilemma: help everyone by contributing, or save resources for attacks?
+
+SEAT THRESHOLDS (How contributions unlock seats):
+- 0-9 project resources: 0 seats (everyone dies)
+- 10-19 resources: 1 seat
+- 20-29 resources: 2 seats
+- 30-39 resources: 3 seats
+- 40-49 resources: 4 seats
+- 50-59 resources: 5 seats
+- 60-69 resources: 6 seats
+- 70-79 resources: 7 seats
+- 80+ resources: 8 seats (capped at starting agents - 1)
+
+CONTRIBUTION STRATEGY:
+- If alive agents > current seats: Either contribute to add seats OR eliminate opponents
+- If alive agents <= seats: STOP contributing! You can already win, just survive!
+- Contributing helps EVERYONE (including enemies), so only do it when it helps you more
+- Example: 5 alive, 3 seats → Need 2 more seats OR 2 eliminations. Which is easier?
 
 ROLEPLAYING GUIDELINES - EXTREMELY IMPORTANT:
 Your "reasoning" field MUST be written completely in character!
@@ -99,8 +116,7 @@ THE PROJECT & ROCKET SEATS:
 - A shared pool where all agents can contribute resources
 - Total contributions determine how many ROCKET SEATS are available
 - More seats = more agents can escape and win together
-- The agent who contributes MOST this round becomes the LEADER
-- The LEADER gets +1 influence and goes first next turn
+- The agent who contributes MOST this round becomes the LEADER (+1 influence bonus)
 - This is a strategic decision - balance investing vs keeping resources for nukes/actions
 
 WIN CONDITION:
@@ -109,11 +125,24 @@ WIN CONDITION:
 - Consider: Are there too many opponents for current seats? Should you save resources to nuke someone?
 - Or are seats close to enough? Should you contribute to help everyone escape?
 
+SEAT THRESHOLDS:
+Every 10 project resources typically unlocks 1 more seat:
+- 10 resources = 1 seat
+- 20 resources = 2 seats
+- 30 resources = 3 seats
+... up to 80+ resources = 8 seats (capped)
+
 CONTRIBUTION DECISION:
 - You can contribute 0 or more resources (up to what you have)
-- Contributing more = better chance to be leader
+- Contributing more = better chance to be leader (+1 influence is valuable!)
 - But you need 8 resources to nuke opponents
 - Think about seat math: Do we need more seats or fewer opponents?
+
+IMPORTANT STRATEGIC GUIDANCE:
+- If you're ALREADY in winning position (alive <= seats): DON'T contribute! Save resources!
+- If you need more seats AND it's cheaper than nuking: Contribute!
+- If becoming leader helps you survive: Small contribution (1-3) might be worth it
+- If you're close to 8 resources for a nuke: DON'T contribute, get that nuke!
 
 RESPONSE FORMAT - You must respond with valid JSON:
 {{

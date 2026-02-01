@@ -395,15 +395,40 @@ def build_contribution_prompt(name, state, round_contributions):
     prompt += f"  Alive Agents: {alive_count}\n"
     prompt += f"  Current Round Leader: {state.get('project_leader', 'None')}\n"
     
-    # Show next seat thresholds
+    # Show next seat thresholds with clearer math
     next_threshold = None
+    resources_needed = 0
     for threshold, seats in SEATS_THRESHOLDS:
         if state['project_total'] < threshold:
             next_threshold = (threshold, seats)
+            resources_needed = threshold - state['project_total']
             break
     
     if next_threshold and next_threshold[1] < num_starting - 1:
-        prompt += f"  Next milestone: {next_threshold[0]} resources = {next_threshold[1]} seats\n"
+        prompt += f"  Next milestone: {next_threshold[0]} resources = {next_threshold[1]} seats ({resources_needed} more needed)\n"
+    else:
+        prompt += f"  MAXIMUM seats reached! No benefit to contributing more.\n"
+    
+    prompt += "\n"
+    
+    # Strategic analysis
+    agents_to_eliminate = alive_count - current_seats
+    prompt += f"STRATEGIC SITUATION:\n"
+    if agents_to_eliminate > 0:
+        prompt += f"  ⚠️ {agents_to_eliminate} agent(s) must be eliminated for anyone to escape!\n"
+        if next_threshold and next_threshold[1] < num_starting - 1:
+            seats_if_reach = next_threshold[1]
+            if alive_count <= seats_if_reach:
+                prompt += f"  💡 If project reaches {next_threshold[0]}, ALL {alive_count} alive agents could escape!\n"
+                prompt += f"  🤝 Contributing helps EVERYONE (including you) win together!\n"
+            else:
+                prompt += f"  💡 Even at next milestone ({seats_if_reach} seats), {alive_count - seats_if_reach} still must die.\n"
+                prompt += f"  ⚔️ Focus on eliminating threats rather than contributing.\n"
+        else:
+            prompt += f"  💀 Save resources to nuke opponents - that's the only path to victory!\n"
+    else:
+        prompt += f"  🎉 VICTORY IS POSSIBLE! {alive_count} agents, {current_seats} seats!\n"
+        prompt += f"  🛡️ Don't contribute - save resources to defend yourself!\n"
     
     prompt += "\n"
     
@@ -413,16 +438,18 @@ def build_contribution_prompt(name, state, round_contributions):
         for agent_name, amount in sorted_contribs:
             prompt += f"  {agent_name}: {amount} resources\n"
         highest_contrib = sorted_contribs[0][1] if sorted_contribs else 0
-        prompt += f"\nTo become leader, you need to contribute MORE than {highest_contrib} resources.\n"
+        prompt += f"\nTo become leader (+1 influence), contribute MORE than {highest_contrib} resources.\n"
     else:
         prompt += "You are the first to contribute this round!\n"
+        prompt += "Contributing even 1 resource makes you the leader (+1 influence) if no one beats it.\n"
     
-    prompt += f"\nREMINDER:\n"
-    prompt += f"- Contributing the MOST this round gives you +1 influence and first action next turn\n"
-    prompt += f"- You need 8 resources to nuke someone\n"
-    prompt += f"- More project resources = more seats = easier for everyone to win!\n"
-    prompt += f"- Agents need to reduce to {current_seats} or fewer to escape\n"
-    prompt += f"- Consider your strategy: invest in seats or save for attacks?\n"
+    prompt += f"\nDECISION FACTORS:\n"
+    prompt += f"- Leader bonus: +1 influence (worth 1 invasion or saves you from being invaded)\n"
+    prompt += f"- Nuke cost: 8 resources (you have {my_stats['resources']})\n"
+    if my_stats['resources'] >= 8:
+        prompt += f"- ⚠️ You can nuke NOW! Consider if contributing is worth delaying your nuke.\n"
+    elif my_stats['resources'] >= 6:
+        prompt += f"- You're close to nuke range! Contributing might delay your ability to eliminate threats.\n"
     
     prompt += f"\nHow many resources do you want to contribute? (0 to {my_stats['resources']})\n"
     
