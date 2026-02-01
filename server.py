@@ -10,7 +10,22 @@ CORS(app)
 # Import ChatAgent - no fallback, real AI only
 from chat import ChatAgent
 
-API_KEY = "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"
+# Multiple API keys for rotation to avoid rate limiting
+# Add as many keys as you want - the more keys, the less rate limiting!
+API_KEYS = [
+    "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",
+    "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",
+    "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",
+    "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"
+]
+current_key_index = 0
+
+def get_next_api_key():
+    """Rotate through API keys to distribute load"""
+    global current_key_index
+    key = API_KEYS[current_key_index]
+    current_key_index = (current_key_index + 1) % len(API_KEYS)
+    return key
 
 # 10 distinct character personas for AI agents
 PERSONALITIES = [
@@ -322,6 +337,13 @@ def run_game(num_agents, has_human):
 
     human_name = game_session["human_player"]
     
+    # Sort agent names so human player goes first each turn
+    if human_name:
+        agent_names = [human_name] + [name for name in agent_names if name != human_name]
+        print(f"📋 Turn order (human first): {agent_names}")
+    else:
+        print(f"📋 Turn order: {agent_names}")
+    
     conversation.append({
         "speaker": "System",
         "message": f"=== BATTLE COMMENCED: {num_agents} AGENTS DEPLOYED ===",
@@ -366,6 +388,10 @@ def run_game(num_agents, has_human):
         for name in agent_names:
             if not state["agents"][name]["alive"]:
                 continue
+            
+            print(f"\n{'='*60}")
+            print(f"🎯 Now processing: {name}'s turn")
+            print(f"{'='*60}")
             
             # Check if this is the human player
             if name == human_name:
@@ -435,11 +461,10 @@ def run_game(num_agents, has_human):
                             include_error=error_message if attempt > 0 else None
                         )
                         
-                        print(f"\n{'='*60}")
-                        print(f"Prompting {name} (attempt {attempt+1}/{max_retries}):")
-                        print(f"{'='*60}")
                         if attempt == 0:
-                            print(strategic_prompt[:500] + "..." if len(strategic_prompt) > 500 else strategic_prompt)
+                            print(f"Prompt preview: {strategic_prompt[:300]}...")
+                        else:
+                            print(f"Retry attempt {attempt+1}/{max_retries}")
                         
                         # Get AI response
                         result = agent.respond(strategic_prompt)
@@ -522,6 +547,10 @@ def run_game(num_agents, has_human):
             if not state["agents"][name]["alive"]:
                 continue
             
+            print(f"\n{'='*60}")
+            print(f"🚀 Now processing: {name}'s contribution")
+            print(f"{'='*60}")
+            
             # Human player contribution
             if name == human_name:
                 game_session["waiting_for_contribution"] = True
@@ -558,9 +587,6 @@ def run_game(num_agents, has_human):
                 
                 try:
                     contrib_prompt = build_contribution_prompt(name, state, round_contributions)
-                    print(f"\n{'='*60}")
-                    print(f"Getting contribution from {name}")
-                    print(f"{'='*60}")
                     
                     result = agent.decide_contribution(contrib_prompt)
                     contribution = result["contribution"]
@@ -697,8 +723,11 @@ def start_game_route():
             name = f"Agent{i}"
             personality = PERSONALITIES[(i-1) % len(PERSONALITIES)]
             
+            # Use rotating API keys
+            api_key = get_next_api_key()
+            
             game_session["agents"][name] = ChatAgent(
-                api_key=API_KEY,
+                api_key=api_key,
                 name=name,
                 personality=personality
             )
@@ -714,6 +743,7 @@ def start_game_route():
         threading.Thread(target=run_game, args=(num_agents, include_human), daemon=True).start()
 
         print(f"✓ Game started with {num_agents} agents (human: {include_human}) using Real Groq AI")
+        print(f"✓ Using {len(API_KEYS)} API key(s) for rotation")
         
         return jsonify({
             "status": "Game started!", 
@@ -806,6 +836,7 @@ if __name__ == '__main__':
     print("🎮 AI BATTLEGROUND SERVER")
     print("="*50)
     print("✓ Using Real Groq AI")
+    print(f"✓ API Key Rotation: {len(API_KEYS)} key(s)")
     print("✓ Project/Rocket System Enabled")
     print("="*50 + "\n")
     

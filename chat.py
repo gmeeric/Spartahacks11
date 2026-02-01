@@ -126,7 +126,7 @@ Example responses:
                     model="llama-3.1-8b-instant",
                     messages=messages,
                     temperature=1.2,  # Higher temperature for more varied strategies
-                    max_tokens=150
+                    max_tokens=50
                 )
 
                 reply = response.choices[0].message.content.strip()

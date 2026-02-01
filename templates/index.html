@@ -766,6 +766,7 @@ button:disabled {
 let updateInterval;
 let lastMessageCount = 0;
 let humanPlayerName = null;
+let contributionPanelInitialized = false;
 
 function startGame() {
     const num_agents = document.getElementById('num_agents').value || 10;
@@ -781,6 +782,7 @@ function startGame() {
         humanPlayerName = data.human_name;
         document.getElementById('chat').innerHTML = '';
         lastMessageCount = 0;
+        contributionPanelInitialized = false;
         document.getElementById('projectStats').style.display = 'block';
         updateInterval = setInterval(updateGame, 500);
     })
@@ -796,6 +798,7 @@ function stopGame() {
         clearInterval(updateInterval);
         document.getElementById('humanActionPanel').classList.remove('active');
         document.getElementById('contributionPanel').classList.remove('active');
+        contributionPanelInitialized = false;
     })
     .catch(err => console.error('Error stopping game:', err));
 }
@@ -826,6 +829,7 @@ function submitContribution() {
     .then(data => {
         console.log('Contribution submitted:', data);
         document.getElementById('contributionPanel').classList.remove('active');
+        contributionPanelInitialized = false;
     })
     .catch(err => console.error('Error submitting contribution:', err));
 }
@@ -839,13 +843,19 @@ function updateActionButtons(myStats) {
 
 function updateContributionPanel(myStats) {
     const slider = document.getElementById('contributionSlider');
-    slider.max = myStats.resources;
-    slider.value = 0;
-    document.getElementById('contributionValue').textContent = '0';
     
-    slider.oninput = function() {
-        document.getElementById('contributionValue').textContent = this.value;
-    };
+    // Only initialize once when panel first appears
+    if (!contributionPanelInitialized) {
+        slider.max = myStats.resources;
+        slider.value = 0;
+        document.getElementById('contributionValue').textContent = '0';
+        
+        slider.oninput = function() {
+            document.getElementById('contributionValue').textContent = this.value;
+        };
+        
+        contributionPanelInitialized = true;
+    }
 }
 
 function updateGame() {
@@ -858,20 +868,31 @@ function updateGame() {
             statusDiv.textContent = `🚀 Turn ${data.turn}/${data.max_turns} - Contribution Phase - Waiting for ${data.human_player}...`;
             statusDiv.className = 'status contributing';
             
-            // Show contribution panel
-            document.getElementById('contributionPanel').classList.add('active');
+            // Show contribution panel (only initialize once)
+            const panel = document.getElementById('contributionPanel');
+            if (!panel.classList.contains('active')) {
+                panel.classList.add('active');
+            }
             
-            // Update contribution slider
+            // Update contribution slider (will only initialize once due to flag)
             if (data.agents[data.human_player]) {
                 updateContributionPanel(data.agents[data.human_player]);
             }
-        } else if (data.waiting_for_human) {
+        } else {
+            // Hide contribution panel when not in contribution phase
+            const panel = document.getElementById('contributionPanel');
+            if (panel.classList.contains('active')) {
+                panel.classList.remove('active');
+                contributionPanelInitialized = false; // Only reset when actually hiding
+            }
+        }
+        
+        if (data.waiting_for_human) {
             statusDiv.textContent = `⏳ Turn ${data.turn}/${data.max_turns} - Waiting for ${data.human_player} to act...`;
             statusDiv.className = 'status waiting';
             
             // Show human action panel
             document.getElementById('humanActionPanel').classList.add('active');
-            document.getElementById('contributionPanel').classList.remove('active');
             
             // Update button states
             if (data.agents[data.human_player]) {
@@ -881,12 +902,10 @@ function updateGame() {
             statusDiv.textContent = `Turn ${data.turn}/${data.max_turns} - Battle in Progress`;
             statusDiv.className = 'status running';
             document.getElementById('humanActionPanel').classList.remove('active');
-            document.getElementById('contributionPanel').classList.remove('active');
-        } else {
+        } else if (!data.waiting_for_contribution) {
             statusDiv.textContent = 'Battle Paused';
             statusDiv.className = 'status paused';
             document.getElementById('humanActionPanel').classList.remove('active');
-            document.getElementById('contributionPanel').classList.remove('active');
         }
 
         // Update project stats
