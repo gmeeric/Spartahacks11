@@ -14,77 +14,44 @@ state_lock = threading.Lock()
 # Import ChatAgent
 from chat import ChatAgent
 
-# OpenRouter API key (single key for all models)
-OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
+# Multiple API keys for rotation to avoid rate limiting
+API_KEYS_ENV = os.environ.get('GROQ_API_KEYS', '')
+if API_KEYS_ENV:
+    API_KEYS = [key.strip() for key in API_KEYS_ENV.split(',') if key.strip()]
+else:
+    # Fallback for local development
+    API_KEYS = [
+        os.environ.get("groq_key_1"),
+        os.environ.get("groq_key_2"),
+        os.environ.get("groq_key_3"),
+        os.environ.get("groq_key_4")
+    ]
 
-if not OPENROUTER_API_KEY:
-    print("⚠️ WARNING: OPENROUTER_API_KEY not set!")
+API_KEYS = [key for key in API_KEYS if key]
 
-print(f"Loaded OpenRouter API key: {'Yes' if OPENROUTER_API_KEY else 'No'}")
+print(f"Loaded {len(API_KEYS)} Groq API key(s)")
 
-# 10 distinct character personas with AI models
-# Using more reliable free models
+current_key_index = 0
+
+def get_next_api_key():
+    """Rotate through API keys to distribute load"""
+    global current_key_index
+    key = API_KEYS[current_key_index]
+    current_key_index = (current_key_index + 1) % len(API_KEYS)
+    return key
+
+# 10 distinct character personas for AI agents
 PERSONALITIES = [
-    {
-        "name": "Cowboy",
-        "description": "Wild West cowboy - uses 'partner', 'reckon', 'varmint'",
-        "model": "meta-llama/llama-3.2-3b-instruct:free",
-        "model_display": "Llama 3.2 3B"
-    },
-    {
-        "name": "Pirate",
-        "description": "Pirate - says 'arr', 'matey', 'scallywag'",
-        "model": "meta-llama/llama-3.2-1b-instruct:free",
-        "model_display": "Llama 3.2 1B"
-    },
-    {
-        "name": "Knight",
-        "description": "Medieval knight - formal, honorable",
-        "model": "meta-llama/llama-3.1-8b-instruct:free",
-        "model_display": "Llama 3.1 8B"
-    },
-    {
-        "name": "Scientist",
-        "description": "Mad scientist - analytical",
-        "model": "google/gemini-flash-1.5-8b:free",
-        "model_display": "Gemini Flash 1.5"
-    },
-    {
-        "name": "Gangster",
-        "description": "1920s mobster - says 'see?', 'wise guy'",
-        "model": "mistralai/mistral-7b-instruct:free",
-        "model_display": "Mistral 7B"
-    },
-    {
-        "name": "ValleyGirl",
-        "description": "Valley girl - says 'like', 'totally'",
-        "model": "qwen/qwen-2-7b-instruct:free",
-        "model_display": "Qwen 2 7B"
-    },
-    {
-        "name": "Shakespeare",
-        "description": "Shakespearean - flowery dramatic language",
-        "model": "microsoft/phi-3-mini-128k-instruct:free",
-        "model_display": "Phi 3 Mini"
-    },
-    {
-        "name": "General",
-        "description": "Military general - tactical commands",
-        "model": "google/gemini-2.0-flash-thinking-exp:free",
-        "model_display": "Gemini 2.0 Thinking"
-    },
-    {
-        "name": "Robot",
-        "description": "Robot - cold logic, ALL CAPS",
-        "model": "meta-llama/llama-3.2-3b-instruct:free",
-        "model_display": "Llama 3.2 3B"
-    },
-    {
-        "name": "Surfer",
-        "description": "Surfer - says 'dude', 'gnarly', 'radical'",
-        "model": "nousresearch/hermes-3-llama-3.1-405b:free",
-        "model_display": "Hermes 405B"
-    }
+    {"name": "Cowboy", "description": "Wild West cowboy - uses 'partner', 'reckon', 'varmint'"},
+    {"name": "Pirate", "description": "Pirate - says 'arr', 'matey', 'scallywag'"},
+    {"name": "Knight", "description": "Medieval knight - formal, honorable"},
+    {"name": "Scientist", "description": "Mad scientist - analytical"},
+    {"name": "Gangster", "description": "1920s mobster - says 'see?', 'wise guy'"},
+    {"name": "ValleyGirl", "description": "Valley girl - says 'like', 'totally'"},
+    {"name": "Shakespeare", "description": "Shakespearean - flowery dramatic language"},
+    {"name": "General", "description": "Military general - tactical commands"},
+    {"name": "Robot", "description": "Robot - cold logic, ALL CAPS"},
+    {"name": "Surfer", "description": "Surfer - says 'dude', 'gnarly', 'radical'"}
 ]
 
 game_session = {
@@ -99,8 +66,7 @@ game_session = {
     "waiting_for_contribution": False,
     "human_contribution": None,
     "num_starting_agents": 0,
-    "agent_memory": {},
-    "agent_models": {}  # Add this to track which model each agent uses
+    "agent_memory": {}
 }
 
 # Seats thresholds for the rocket project
@@ -816,17 +782,15 @@ def start_game_route():
             personality_data = available_personalities[i % len(available_personalities)]
             name = personality_data["name"]
             personality_desc = personality_data["description"]
-            model_name = personality_data["model"]
-            model_display = personality_data["model_display"]
+            
+            api_key = get_next_api_key()
             
             game_session["agents"][name] = ChatAgent(
-                api_key=OPENROUTER_API_KEY,
+                api_key=api_key,
                 name=name,
-                personality=personality_desc,
-                model_name=model_name
+                personality=personality_desc
             )
-            game_session["agent_models"][name] = model_display  # Store for display
-            print(f"✓ Created {name} using {model_display}")
+            print(f"✓ Created {name}")
             
             game_session["game_state"]["agents"][name] = {
                 "resources": 0,
@@ -863,7 +827,6 @@ def get_game_state():
     agents_state = state.get("agents", {})
     return jsonify({
         "agents": agents_state,
-        "agent_models": game_session.get("agent_models", {}),  # Add this line
         "turn": state.get("turn", 1),
         "max_turns": state.get("max_turns", 15),
         "running": game_session.get("running", False),
