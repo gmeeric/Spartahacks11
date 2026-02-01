@@ -4,6 +4,8 @@ import threading
 import time
 import random
 import os
+from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures
 
 app = Flask(__name__)
 CORS(app)
@@ -69,15 +71,15 @@ game_session = {
 
 # Seats thresholds for the rocket project
 SEATS_THRESHOLDS = [
-    (0, 0),      # 0-29 resources = 0 seats
-    (10, 1),     # 30-39 resources = 1 seat
-    (20, 2),     # 40-49 resources = 2 seats
-    (30, 3),     # 50-59 resources = 3 seats
-    (40, 4),     # 60-69 resources = 4 seats
-    (50, 5),     # 70-79 resources = 5 seats
-    (60, 6),     # 80-89 resources = 6 seats
-    (70, 7),     # 90-99 resources = 7 seats
-    (80, 8),    # 100+ resources = 8 seats
+    (0, 0),      # 0-9 resources = 0 seats
+    (10, 1),     # 10-19 resources = 1 seat
+    (20, 2),     # 20-29 resources = 2 seats
+    (30, 3),     # 30-39 resources = 3 seats
+    (40, 4),     # 40-49 resources = 4 seats
+    (50, 5),     # 50-59 resources = 5 seats
+    (60, 6),     # 60-69 resources = 6 seats
+    (70, 7),     # 70-79 resources = 7 seats
+    (80, 8),     # 80+ resources = 8 seats
 ]
 
 def calculate_available_seats(project_total, num_starting_agents):
@@ -403,6 +405,125 @@ def build_contribution_prompt(name, state, round_contributions):
     
     return prompt
 
+# ------------------- Parallel Processing Functions -------------------
+
+def process_agent_action(name, agent, state, conversation, last_seen_index):
+    """Process a single agent's action (runs in parallel with other agents)"""
+    if not state["agents"][name]["alive"]:
+        return None
+    
+    print(f"\n{'='*60}")
+    print(f"🎯 Now processing: {name}'s turn")
+    print(f"{'='*60}")
+    
+    # AI agent - try to get a valid action (with retries)
+    max_retries = 3
+    chosen_action = None
+    chosen_target = None
+    explanation = None
+    error_message = None
+    
+    for attempt in range(max_retries):
+        try:
+            # Build strategic prompt
+            strategic_prompt = build_strategic_prompt(
+                name, state, conversation, last_seen_index[name], 
+                include_error=error_message if attempt > 0 else None
+            )
+            
+            if attempt == 0:
+                print(f"Prompt preview: {strategic_prompt[:300]}...")
+            else:
+                print(f"Retry attempt {attempt+1}/{max_retries}")
+            
+            # Get AI response
+            result = agent.respond(strategic_prompt)
+            chosen_action = result["action"]
+            chosen_target = result.get("target", None)
+            explanation = result["explanation"]
+            
+            print(f"AI Response: {chosen_action}" + (f" targeting {chosen_target}" if chosen_target else "") + f" - {explanation}")
+            
+            # Check if action is valid
+            can_perform, error_message = can_perform_action(name, chosen_action, state)
+            
+            if can_perform:
+                # Validate target if action requires one
+                if chosen_action in ["Invade", "Propagandize", "Nuke"]:
+                    valid_targets = []
+                    if chosen_action == "Invade":
+                        valid_targets = get_valid_targets_for_invade(name, state)
+                    elif chosen_action == "Propagandize":
+                        valid_targets = get_valid_targets_for_propagandize(name, state)
+                    elif chosen_action == "Nuke":
+                        valid_targets = get_valid_targets_for_nuke(name, state)
+                    
+                    # If target is invalid or missing, it will be random (handled in apply_action)
+                    if chosen_target and chosen_target not in valid_targets:
+                        print(f"⚠️ Invalid target {chosen_target}, will choose randomly from {valid_targets}")
+                        chosen_target = None
+                
+                print(f"✓ Valid action accepted")
+                break
+            else:
+                print(f"✗ Invalid: {error_message}")
+                if attempt == max_retries - 1:
+                    # Last retry failed, force Produce
+                    print(f"✗ {name} failed all retries, forcing Produce")
+                    chosen_action = "Produce"
+                    chosen_target = None
+                    explanation = "Forced to produce after invalid attempts"
+        
+        except Exception as e:
+            print(f"✗ Error getting response from {name}: {e}")
+            chosen_action = "Produce"
+            chosen_target = None
+            explanation = f"Error: {str(e)[:30]}"
+            break
+    
+    return {
+        "name": name,
+        "action": chosen_action,
+        "target": chosen_target,
+        "explanation": explanation
+    }
+
+def process_agent_contribution(name, agent, state, round_contributions):
+    """Process a single agent's contribution (runs in parallel with other agents)"""
+    if not state["agents"][name]["alive"]:
+        return None
+    
+    print(f"\n{'='*60}")
+    print(f"🚀 Now processing: {name}'s contribution")
+    print(f"{'='*60}")
+    
+    try:
+        contrib_prompt = build_contribution_prompt(name, state, round_contributions)
+        
+        result = agent.decide_contribution(contrib_prompt)
+        contribution = result["contribution"]
+        reasoning = result["reasoning"]
+        
+        # Validate contribution
+        max_contrib = state["agents"][name]["resources"]
+        contribution = max(0, min(contribution, max_contrib))
+        
+        print(f"AI Contribution: {contribution} resources - {reasoning}")
+        
+        return {
+            "name": name,
+            "contribution": contribution,
+            "reasoning": reasoning
+        }
+        
+    except Exception as e:
+        print(f"✗ Error getting contribution from {name}: {e}")
+        return {
+            "name": name,
+            "contribution": 0,
+            "reasoning": "Error in decision"
+        }
+
 # ------------------- Game Loop -------------------
 
 def run_game(num_agents, has_human):
@@ -443,147 +564,70 @@ def run_game(num_agents, has_human):
         available_seats = calculate_available_seats(state["project_total"], state["num_starting_agents"])
         state["available_seats"] = available_seats
         
-        # Check win condition: alive agents <= available seats at START of contribution phase
-        # This check happens before the action phase, so it's based on previous turn's state
-        
         conversation.append({
             "speaker": "System",
             "message": f"--- Turn {state['turn']} ---",
             "time": time.time()
         })
 
-        # ACTION PHASE
-        for name in agent_names:
-            if not state["agents"][name]["alive"]:
-                continue
-            
+        # ==================== ACTION PHASE ====================
+        
+        # Process human player first if exists
+        if human_name and state["agents"][human_name]["alive"]:
             print(f"\n{'='*60}")
-            print(f"🎯 Now processing: {name}'s turn")
+            print(f"🎯 Now processing: {human_name}'s turn (HUMAN)")
             print(f"{'='*60}")
             
-            # Check if this is the human player
-            if name == human_name:
-                # Wait for human input
-                game_session["waiting_for_human"] = True
-                game_session["human_action"] = None
-                game_session["human_target"] = None
-                
+            # Wait for human input
+            game_session["waiting_for_human"] = True
+            game_session["human_action"] = None
+            game_session["human_target"] = None
+            
+            conversation.append({
+                "speaker": "System",
+                "message": f"⏳ Waiting for {human_name} to choose an action...",
+                "time": time.time()
+            })
+            
+            # Wait until human makes a choice
+            timeout = 30  # 30 second timeout
+            waited = 0
+            while game_session["human_action"] is None and waited < timeout:
+                time.sleep(0.5)
+                waited += 0.5
+            
+            game_session["waiting_for_human"] = False
+            
+            if game_session["human_action"] is None:
+                # Timeout - auto produce
+                chosen_action = "Produce"
+                chosen_target = None
+                explanation = "Timeout - auto produced"
                 conversation.append({
                     "speaker": "System",
-                    "message": f"⏳ Waiting for {human_name} to choose an action...",
+                    "message": f"⏰ {human_name} timed out - auto Produce",
                     "time": time.time()
                 })
-                
-                # Wait until human makes a choice
-                timeout = 30  # 30 second timeout
-                waited = 0
-                while game_session["human_action"] is None and waited < timeout:
-                    time.sleep(0.5)
-                    waited += 0.5
-                
-                game_session["waiting_for_human"] = False
-                
-                if game_session["human_action"] is None:
-                    # Timeout - auto produce
-                    chosen_action = "Produce"
-                    chosen_target = None
-                    explanation = "Timeout - auto produced"
-                    conversation.append({
-                        "speaker": "System",
-                        "message": f"⏰ {human_name} timed out - auto Produce",
-                        "time": time.time()
-                    })
-                else:
-                    chosen_action = game_session["human_action"]
-                    chosen_target = game_session["human_target"]  # Use the target from frontend
-                    explanation = "Human choice"
-                
-                # Validate action
-                can_perform, error_message = can_perform_action(name, chosen_action, state)
-                if not can_perform:
-                    # Force to Produce if invalid
-                    conversation.append({
-                        "speaker": "System",
-                        "message": f"❌ Invalid action: {error_message}. Auto Produce instead.",
-                        "time": time.time()
-                    })
-                    chosen_action = "Produce"
-                    explanation = "Invalid action - auto produced"
-                    chosen_target = None
-                
             else:
-                # AI agent
-                agent = game_session["agents"][name]
-                
-                # Try to get a valid action (with retries)
-                max_retries = 3
-                chosen_action = None
+                chosen_action = game_session["human_action"]
+                chosen_target = game_session["human_target"]
+                explanation = "Human choice"
+            
+            # Validate action
+            can_perform, error_message = can_perform_action(human_name, chosen_action, state)
+            if not can_perform:
+                # Force to Produce if invalid
+                conversation.append({
+                    "speaker": "System",
+                    "message": f"❌ Invalid action: {error_message}. Auto Produce instead.",
+                    "time": time.time()
+                })
+                chosen_action = "Produce"
+                explanation = "Invalid action - auto produced"
                 chosen_target = None
-                explanation = None
-                error_message = None
-                
-                for attempt in range(max_retries):
-                    try:
-                        # Build strategic prompt
-                        strategic_prompt = build_strategic_prompt(
-                            name, state, conversation, last_seen_index[name], 
-                            include_error=error_message if attempt > 0 else None
-                        )
-                        
-                        if attempt == 0:
-                            print(f"Prompt preview: {strategic_prompt[:300]}...")
-                        else:
-                            print(f"Retry attempt {attempt+1}/{max_retries}")
-                        
-                        # Get AI response
-                        result = agent.respond(strategic_prompt)
-                        chosen_action = result["action"]
-                        chosen_target = result.get("target", None)
-                        explanation = result["explanation"]
-                        
-                        print(f"AI Response: {chosen_action}" + (f" targeting {chosen_target}" if chosen_target else "") + f" - {explanation}")
-                        
-                        # Check if action is valid
-                        can_perform, error_message = can_perform_action(name, chosen_action, state)
-                        
-                        if can_perform:
-                            # Validate target if action requires one
-                            if chosen_action in ["Invade", "Propagandize", "Nuke"]:
-                                valid_targets = []
-                                if chosen_action == "Invade":
-                                    valid_targets = get_valid_targets_for_invade(name, state)
-                                elif chosen_action == "Propagandize":
-                                    valid_targets = get_valid_targets_for_propagandize(name, state)
-                                elif chosen_action == "Nuke":
-                                    valid_targets = get_valid_targets_for_nuke(name, state)
-                                
-                                # If target is invalid or missing, it will be random (handled in apply_action)
-                                if chosen_target and chosen_target not in valid_targets:
-                                    print(f"⚠️ Invalid target {chosen_target}, will choose randomly from {valid_targets}")
-                                    chosen_target = None
-                            
-                            print(f"✓ Valid action accepted")
-                            break
-                        else:
-                            print(f"✗ Invalid: {error_message}")
-                            if attempt == max_retries - 1:
-                                # Last retry failed, force Produce
-                                print(f"✗ {name} failed all retries, forcing Produce")
-                                chosen_action = "Produce"
-                                chosen_target = None
-                                explanation = "Forced to produce after invalid attempts"
-                    
-                    except Exception as e:
-                        print(f"✗ Error getting response from {name}: {e}")
-                        chosen_action = "Produce"
-                        chosen_target = None
-                        explanation = f"Error: {str(e)[:30]}"
-                        break
-
-            # Apply action (we know it's valid now)
-            action_result = apply_action(name, chosen_action, chosen_target, state)
-
-            # Add to conversation
+            
+            # Apply human action
+            action_result = apply_action(human_name, chosen_action, chosen_target, state)
             message_text = f"{chosen_action}"
             if action_result:
                 message_text += f" — {action_result}"
@@ -591,19 +635,60 @@ def run_game(num_agents, has_human):
                 message_text += f" | Reasoning: {explanation}"
             
             conversation.append({
-                "speaker": name,
+                "speaker": human_name,
                 "message": message_text,
                 "time": time.time()
             })
-            last_seen_index[name] = len(conversation)
+            last_seen_index[human_name] = len(conversation)
+        
+        # Process all AI agents in PARALLEL
+        ai_agents = [name for name in agent_names if name != human_name and state["agents"][name]["alive"]]
+        
+        if ai_agents:
+            print(f"\n⚡ Processing {len(ai_agents)} AI agents in PARALLEL...")
+            
+            with ThreadPoolExecutor(max_workers=len(ai_agents)) as executor:
+                # Submit all agent actions to run in parallel
+                futures = {
+                    executor.submit(
+                        process_agent_action,
+                        name,
+                        game_session["agents"][name],
+                        state,
+                        conversation,
+                        last_seen_index
+                    ): name for name in ai_agents
+                }
+                
+                # Collect results as they complete
+                for future in concurrent.futures.as_completed(futures):
+                    result = future.result()
+                    if result:
+                        name = result["name"]
+                        chosen_action = result["action"]
+                        chosen_target = result["target"]
+                        explanation = result["explanation"]
+                        
+                        # Apply action
+                        action_result = apply_action(name, chosen_action, chosen_target, state)
+                        
+                        # Add to conversation
+                        message_text = f"{chosen_action}"
+                        if action_result:
+                            message_text += f" — {action_result}"
+                        if explanation:
+                            message_text += f" | Reasoning: {explanation}"
+                        
+                        conversation.append({
+                            "speaker": name,
+                            "message": message_text,
+                            "time": time.time()
+                        })
+                        last_seen_index[name] = len(conversation)
 
-            # Delay between agents to avoid rate limits
-            if name != agent_names[-1] or not state["agents"][agent_names[-1]]["alive"]:
-                time.sleep(1)  # 1 second pause between agents
-            else:
-                time.sleep(1)  # 1 second pause before contribution phase
+        time.sleep(0.5)  # Brief pause before contribution phase
 
-        # PROJECT CONTRIBUTION PHASE
+        # ==================== PROJECT CONTRIBUTION PHASE ====================
         conversation.append({
             "speaker": "System",
             "message": f"🚀 PROJECT CONTRIBUTION PHASE - Turn {state['turn']}",
@@ -646,72 +731,46 @@ def run_game(num_agents, has_human):
         
         round_contributions = {}
         
-        for name in agent_names:
-            if not state["agents"][name]["alive"]:
-                continue
-            
+        # Process human contribution first if exists
+        if human_name and state["agents"][human_name]["alive"]:
             print(f"\n{'='*60}")
-            print(f"🚀 Now processing: {name}'s contribution")
+            print(f"🚀 Now processing: {human_name}'s contribution (HUMAN)")
             print(f"{'='*60}")
             
-            # Human player contribution
-            if name == human_name:
-                game_session["waiting_for_contribution"] = True
-                game_session["human_contribution"] = None
-                
-                conversation.append({
-                    "speaker": "System",
-                    "message": f"⏳ Waiting for {human_name} to decide contribution...",
-                    "time": time.time()
-                })
-                
-                timeout = 30
-                waited = 0
-                while game_session["human_contribution"] is None and waited < timeout:
-                    time.sleep(0.5)
-                    waited += 0.5
-                
-                game_session["waiting_for_contribution"] = False
-                
-                if game_session["human_contribution"] is None:
-                    contribution = 0
-                    reasoning = "Timeout - no contribution"
-                else:
-                    contribution = game_session["human_contribution"]
-                    reasoning = "Human decision"
-                
-                # Validate contribution
-                max_contrib = state["agents"][name]["resources"]
-                contribution = max(0, min(contribution, max_contrib))
-                
+            game_session["waiting_for_contribution"] = True
+            game_session["human_contribution"] = None
+            
+            conversation.append({
+                "speaker": "System",
+                "message": f"⏳ Waiting for {human_name} to decide contribution...",
+                "time": time.time()
+            })
+            
+            timeout = 30
+            waited = 0
+            while game_session["human_contribution"] is None and waited < timeout:
+                time.sleep(0.5)
+                waited += 0.5
+            
+            game_session["waiting_for_contribution"] = False
+            
+            if game_session["human_contribution"] is None:
+                contribution = 0
+                reasoning = "Timeout - no contribution"
             else:
-                # AI agent contribution
-                agent = game_session["agents"][name]
-                
-                try:
-                    contrib_prompt = build_contribution_prompt(name, state, round_contributions)
-                    
-                    result = agent.decide_contribution(contrib_prompt)
-                    contribution = result["contribution"]
-                    reasoning = result["reasoning"]
-                    
-                    # Validate contribution
-                    max_contrib = state["agents"][name]["resources"]
-                    contribution = max(0, min(contribution, max_contrib))
-                    
-                    print(f"AI Contribution: {contribution} resources - {reasoning}")
-                    
-                except Exception as e:
-                    print(f"✗ Error getting contribution from {name}: {e}")
-                    contribution = 0
-                    reasoning = "Error in decision"
+                contribution = game_session["human_contribution"]
+                reasoning = "Human decision"
+            
+            # Validate contribution
+            max_contrib = state["agents"][human_name]["resources"]
+            contribution = max(0, min(contribution, max_contrib))
             
             # Apply contribution
             if contribution > 0:
-                state["agents"][name]["resources"] -= contribution
+                state["agents"][human_name]["resources"] -= contribution
                 state["project_total"] += contribution
             
-            round_contributions[name] = contribution
+            round_contributions[human_name] = contribution
             
             # Add to conversation
             message_text = f"Contributed {contribution} resources to the project"
@@ -719,12 +778,54 @@ def run_game(num_agents, has_human):
                 message_text += f" | {reasoning}"
             
             conversation.append({
-                "speaker": name,
+                "speaker": human_name,
                 "message": message_text,
                 "time": time.time()
             })
+        
+        # Process all AI agent contributions in PARALLEL
+        ai_agents_alive = [name for name in agent_names if name != human_name and state["agents"][name]["alive"]]
+        
+        if ai_agents_alive:
+            print(f"\n⚡ Processing {len(ai_agents_alive)} AI contributions in PARALLEL...")
             
-            time.sleep(1)  # 1 second pause between contribution decisions
+            with ThreadPoolExecutor(max_workers=len(ai_agents_alive)) as executor:
+                # Submit all contributions to run in parallel
+                futures = {
+                    executor.submit(
+                        process_agent_contribution,
+                        name,
+                        game_session["agents"][name],
+                        state,
+                        round_contributions
+                    ): name for name in ai_agents_alive
+                }
+                
+                # Collect results as they complete
+                for future in concurrent.futures.as_completed(futures):
+                    result = future.result()
+                    if result:
+                        name = result["name"]
+                        contribution = result["contribution"]
+                        reasoning = result["reasoning"]
+                        
+                        # Apply contribution
+                        if contribution > 0:
+                            state["agents"][name]["resources"] -= contribution
+                            state["project_total"] += contribution
+                        
+                        round_contributions[name] = contribution
+                        
+                        # Add to conversation
+                        message_text = f"Contributed {contribution} resources to the project"
+                        if reasoning:
+                            message_text += f" | {reasoning}"
+                        
+                        conversation.append({
+                            "speaker": name,
+                            "message": message_text,
+                            "time": time.time()
+                        })
         
         # Determine round leader (highest contributor)
         if round_contributions:
@@ -761,7 +862,7 @@ def run_game(num_agents, has_human):
         })
 
         state["turn"] += 1
-        time.sleep(1)  # Pause before next turn
+        time.sleep(0.5)  # Brief pause before next turn
 
     game_session["running"] = False
     game_session["waiting_for_human"] = False
@@ -853,7 +954,7 @@ def start_game_route():
         game_session["running"] = True
         threading.Thread(target=run_game, args=(num_agents, include_human), daemon=True).start()
 
-        print(f"✓ Game started with {num_agents} agents (human: {include_human}) using Real Groq AI")
+        print(f"✓ Game started with {num_agents} agents (human: {include_human}) using PARALLEL PROCESSING")
         print(f"✓ Using {len(API_KEYS)} API key(s) for rotation")
         
         return jsonify({
@@ -949,12 +1050,13 @@ def stop_game():
 
 if __name__ == '__main__':
     print("\n" + "="*50)
-    print("🎮 AI BATTLEGROUND SERVER")
+    print("🎮 AI BATTLEGROUND SERVER - PARALLEL EDITION")
     print("="*50)
     print("✓ Using Real Groq AI")
     print(f"✓ API Key Rotation: {len(API_KEYS)} key(s)")
+    print("✓ PARALLEL PROCESSING ENABLED ⚡")
     print("✓ Project/Rocket System Enabled")
-    print("✓ Seats system: max = (starting agents - 1)")
+    print("✓ Expected speedup: ~10x faster turns!")
     print("="*50 + "\n")
     
     # Get port from environment variable (for deployment platforms)
