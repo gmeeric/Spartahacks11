@@ -44,18 +44,48 @@ def get_next_api_key():
     current_key_index = (current_key_index + 1) % len(API_KEYS)
     return key
 
-# 10 distinct character personas for AI agents
+# 10 distinct character personas for AI agents with their display names
 PERSONALITIES = [
-    "1800s Wild West Cowboy - speaks with 'partner', 'reckon', 'varmint', uses frontier slang",
-    "Pirate Captain - says 'arr', 'matey', 'scallywag', talks about treasure and the seven seas",
-    "Medieval Knight - formal, honorable, talks about chivalry and valor, says 'thy' and 'thou'",
-    "Mad Scientist - analytical, uses science terms, talks about hypotheses and experiments",
-    "1920s Gangster - talks like a mobster, says 'see?', 'wise guy', 'gonna whack'",
-    "Valley Girl - says 'like', 'totally', 'literally', very casual and modern",
-    "Shakespearean Actor - flowery dramatic language, speaks in old English poetic style",
-    "Military General - commands, strategies, talks about tactics and deployment",
-    "Robot/AI - cold logic, says 'CALCULATING', 'PROTOCOL', speaks in ALL CAPS sometimes",
-    "Surfer Dude - laid back, says 'dude', 'gnarly', 'radical', very chill"
+    {
+        "name": "Cowboy",
+        "description": "1800s Wild West Cowboy - speaks with 'partner', 'reckon', 'varmint', uses frontier slang"
+    },
+    {
+        "name": "Pirate",
+        "description": "Pirate Captain - says 'arr', 'matey', 'scallywag', talks about treasure and the seven seas"
+    },
+    {
+        "name": "Knight",
+        "description": "Medieval Knight - formal, honorable, talks about chivalry and valor, says 'thy' and 'thou'"
+    },
+    {
+        "name": "Scientist",
+        "description": "Mad Scientist - analytical, uses science terms, talks about hypotheses and experiments"
+    },
+    {
+        "name": "Gangster",
+        "description": "1920s Gangster - talks like a mobster, says 'see?', 'wise guy', 'gonna whack'"
+    },
+    {
+        "name": "ValleyGirl",
+        "description": "Valley Girl - says 'like', 'totally', 'literally', very casual and modern"
+    },
+    {
+        "name": "Shakespeare",
+        "description": "Shakespearean Actor - flowery dramatic language, speaks in old English poetic style"
+    },
+    {
+        "name": "General",
+        "description": "Military General - commands, strategies, talks about tactics and deployment"
+    },
+    {
+        "name": "Robot",
+        "description": "Robot/AI - cold logic, says 'CALCULATING', 'PROTOCOL', speaks in ALL CAPS sometimes"
+    },
+    {
+        "name": "Surfer",
+        "description": "Surfer Dude - laid back, says 'dude', 'gnarly', 'radical', very chill"
+    }
 ]
 
 game_session = {
@@ -965,25 +995,31 @@ def start_game_route():
             "num_starting_agents": num_agents
         }
 
-        # Create agents
-        agent_start = 1
+        # Determine which personalities to use
+        available_personalities = PERSONALITIES.copy()
+        random.shuffle(available_personalities)  # Randomize personality assignment
+        
+        agent_index = 0
+        
+        # Create human player first if requested
         if include_human:
-            # Human player is Agent1
-            name = "Agent1"
+            name = "Human"
             game_session["human_player"] = name
-            # Add a placeholder to agents dict so Agent1 appears in agent_names
+            # Add a placeholder to agents dict so Human appears in agent_names
             game_session["agents"][name] = None  # Human player, no ChatAgent needed
             game_session["game_state"]["agents"][name] = {
                 "resources": 0,
                 "influence": 0,
                 "alive": True
             }
-            agent_start = 2
             print(f"✓ Created {name} as HUMAN PLAYER")
         
-        for i in range(agent_start, num_agents + 1):
-            name = f"Agent{i}"
-            personality = PERSONALITIES[(i-1) % len(PERSONALITIES)]
+        # Create AI agents with personality-based names
+        num_ai_agents = num_agents - (1 if include_human else 0)
+        for i in range(num_ai_agents):
+            personality_data = available_personalities[i % len(available_personalities)]
+            name = personality_data["name"]
+            personality_desc = personality_data["description"]
             
             # Use rotating API keys
             api_key = get_next_api_key()
@@ -991,9 +1027,9 @@ def start_game_route():
             game_session["agents"][name] = ChatAgent(
                 api_key=api_key,
                 name=name,
-                personality=personality
+                personality=personality_desc
             )
-            print(f"✓ Created {name} with personality: {personality}")
+            print(f"✓ Created {name} with personality: {personality_desc}")
             
             game_session["game_state"]["agents"][name] = {
                 "resources": 0,
