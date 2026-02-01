@@ -40,16 +40,18 @@ def get_next_api_key():
     current_key_index = (current_key_index + 1) % len(API_KEYS)
     return key
 
-# 8 FREE GROQ MODELS - Each agent will use a different one!
+# 8 INSTANCES using CONFIRMED WORKING FREE GROQ MODELS (February 2026)
+# Only using the 2 models that worked in testing
+# Alternating between them for variety
 GROQ_MODELS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-70b-versatile", 
-    "llama-3.1-8b-instant",
-    "llama-3.2-1b-preview",
-    "llama-3.2-3b-preview",
-    "mixtral-8x7b-32768",
-    "gemma2-9b-it",
-    "llama-3.2-90b-text-preview"
+    "llama-3.3-70b-versatile",      # Large model (70B)
+    "llama-3.1-8b-instant",         # Fast model (8B)
+    "llama-3.3-70b-versatile",      # Large model
+    "llama-3.1-8b-instant",         # Fast model
+    "llama-3.3-70b-versatile",      # Large model
+    "llama-3.1-8b-instant",         # Fast model
+    "llama-3.3-70b-versatile",      # Large model
+    "llama-3.1-8b-instant"          # Fast model
 ]
 
 current_model_index = 0
@@ -837,7 +839,7 @@ def start_game_route():
         game_session["running"] = True
         threading.Thread(target=run_game, args=(num_agents, include_human), daemon=True).start()
 
-        print(f"✓ Game started - 8 DIFFERENT AI MODELS - SEQUENTIAL VERSION")
+        print(f"✓ Game started - 2 WORKING MODELS (half and half)")
         
         return jsonify({
             "status": "Game started!", 
@@ -863,6 +865,7 @@ def get_game_state():
     agents_state = state.get("agents", {})
     return jsonify({
         "agents": agents_state,
+        "agent_models": game_session.get("agent_models", {}),
         "turn": state.get("turn", 1),
         "max_turns": state.get("max_turns", 15),
         "running": game_session.get("running", False),
@@ -926,12 +929,13 @@ def stop_game():
 
 if __name__ == '__main__':
     print("\n" + "="*50)
-    print("🎮 AI IS DOOMED - 8 MODELS EDITION")
+    print("🎮 AI IS DOOMED - 2 MODEL EDITION")
     print("="*50)
-    print("✓ Each AI agent uses a different Groq model!")
-    print("✓ Models used:")
-    for i, model in enumerate(GROQ_MODELS, 1):
-        print(f"  {i}. {model}")
+    print("✓ Using 2 confirmed working FREE Groq models!")
+    print("✓ Models alternating:")
+    print(f"  1. llama-3.3-70b-versatile (Strategic - 70B)")
+    print(f"  2. llama-3.1-8b-instant (Fast - 8B)")
+    print("✓ 4 agents per model (alternating)")
     print("="*50)
     print("✓ 15 turn time limit")
     print("✓ Highest influence wins if time runs out")
