@@ -80,6 +80,8 @@ Respond ONLY in JSON:
 
             if "```" in raw:
                 raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
 
             data = json.loads(raw)
 
@@ -104,7 +106,70 @@ Respond ONLY in JSON:
             }
 
 # =========================================================
-# GAME LOOP (SEQUENTIAL AI TURNS → CONTRIBUTION PHASE)
+# GAME STATE
+# =========================================================
+
+game = {
+    "running": False,
+    "turn": 1,
+    "agents": {},
+    "log": [],
+    "project_total": 0,
+    "num_starting_agents": 0
+}
+
+state_lock = threading.Lock()
+
+def rocket_seats():
+    return min(8, game["project_total"] // 10)
+
+# =========================================================
+# GAME LOGIC
+# =========================================================
+
+def apply_action(name, action, target):
+    actor = game["agents"][name]
+
+    if not actor["alive"]:
+        return "is eliminated."
+
+    if action == "Produce":
+        actor["resources"] += 2
+        return "produced 2 resources."
+
+    if action == "Influence":
+        actor["influence"] += 1
+        return "gained influence."
+
+    if action == "Invade" and actor["influence"] >= 1:
+        if target in game["agents"] and game["agents"][target]["alive"]:
+            actor["influence"] -= 1
+            stolen = min(2, game["agents"][target]["resources"])
+            game["agents"][target]["resources"] -= stolen
+            actor["resources"] += stolen
+            return f"invaded {target}, stole {stolen} resources."
+        return "failed (invalid target)."
+
+    if action == "Propagandize" and actor["resources"] >= 1:
+        if target in game["agents"] and game["agents"][target]["alive"]:
+            actor["resources"] -= 1
+            stolen = min(1, game["agents"][target]["influence"])
+            game["agents"][target]["influence"] -= stolen
+            actor["influence"] += stolen
+            return f"propagandized {target}, stole influence."
+        return "failed (invalid target)."
+
+    if action == "Nuke" and actor["resources"] >= 8:
+        if target in game["agents"] and game["agents"][target]["alive"]:
+            actor["resources"] -= 8
+            game["agents"][target]["alive"] = False
+            return f"NUKED {target} ☢️"
+        return "failed (invalid target)."
+
+    return "failed to act."
+
+# =========================================================
+# GAME LOOP (AI 1 → AI 2 → ... → CONTRIBUTION PHASE)
 # =========================================================
 
 def game_loop():
@@ -126,22 +191,21 @@ def game_loop():
             })
 
         # ===== PHASE 1: SEQUENTIAL AI ACTIONS =====
-        # Each AI gets their turn one at a time
         planned = {}
         
-        # Get list of alive agents at start of turn
+        # Get snapshot of alive agents
         with state_lock:
             alive_agents = [(name, agent_data) for name, agent_data in game["agents"].items() if agent_data["alive"]]
 
         for name, agent_data in alive_agents:
-            # Skip if agent died during this turn
+            # Check if still alive (might have been nuked this turn)
             with state_lock:
                 if not game["agents"][name]["alive"]:
                     continue
             
             agent = agent_data["agent"]
 
-            # Build prompt with current state
+            # Build prompt with CURRENT state
             with state_lock:
                 prompt = f"""
 STATE:
@@ -157,7 +221,7 @@ Rocket seats: {rocket_seats()}
             decision = agent.respond(prompt)
             planned[name] = decision
 
-            # Apply action immediately and log
+            # Apply action and log
             with state_lock:
                 outcome = apply_action(
                     name,
@@ -170,11 +234,10 @@ Rocket seats: {rocket_seats()}
                     "message": f"{decision['action']} → {outcome}"
                 })
 
-            # Delay before next AI's turn (visible pacing)
+            # Delay before next AI's turn
             time.sleep(TURN_DELAY_SECONDS)
 
         # ===== PHASE 2: CONTRIBUTION PHASE =====
-        # After all AIs have acted, handle contributions
         with state_lock:
             game["log"].append({
                 "speaker": "System",
@@ -182,7 +245,6 @@ Rocket seats: {rocket_seats()}
             })
 
             for name, decision in planned.items():
-                # Check if agent still exists and is alive
                 if name not in game["agents"]:
                     continue
                     
@@ -200,16 +262,16 @@ Rocket seats: {rocket_seats()}
                         "message": f"contributed {contrib} resources"
                     })
 
-            # End of turn summary
             game["log"].append({
                 "speaker": "System",
-                "message": f"Project Total: {game['project_total']} | Seats: {rocket_seats()}"
+                "message": f"Turn {game['turn']} complete | Project: {game['project_total']} | Seats: {rocket_seats()}"
             })
 
         with state_lock:
             game["turn"] += 1
 
-    game["running"] = False
+    with state_lock:
+        game["running"] = False
 
 # =========================================================
 # FLASK API
@@ -217,6 +279,10 @@ Rocket seats: {rocket_seats()}
 
 app = Flask(__name__)
 CORS(app)
+
+@app.route("/")
+def index():
+    return jsonify({"status": "running", "message": "Game server active"})
 
 @app.route("/api/start", methods=["POST"])
 def start():
@@ -230,6 +296,9 @@ def start():
         os.environ.get("GROQ_API_KEY_4")
     ]
     api_keys = [k for k in api_keys if k]
+
+    if not api_keys:
+        return jsonify({"error": "No API keys found"}), 400
 
     with state_lock:
         game["agents"].clear()
@@ -254,12 +323,13 @@ def start():
     threading.Thread(target=game_loop, daemon=True).start()
     return jsonify({"status": "started"})
 
-@app.route("/api/state")
+@app.route("/api/state", methods=["GET"])
 def state():
     with state_lock:
         return jsonify({
             "turn": game["turn"],
             "project": game["project_total"],
+            "running": game["running"],
             "agents": {
                 k: {
                     "resources": v["resources"],
@@ -270,14 +340,15 @@ def state():
             }
         })
 
-@app.route("/api/log")
+@app.route("/api/log", methods=["GET"])
 def log():
     with state_lock:
         return jsonify(game["log"])
 
 @app.route("/api/stop", methods=["POST"])
 def stop():
-    game["running"] = False
+    with state_lock:
+        game["running"] = False
     return jsonify({"status": "stopped"})
 
 # =========================================================
@@ -285,4 +356,5 @@ def stop():
 # =========================================================
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, threaded=True)
+    print("Starting game server on port 5001...")
+    app.run(host="0.0.0.0", port=5001, threaded=True, debug=True)
