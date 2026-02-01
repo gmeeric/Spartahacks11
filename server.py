@@ -164,7 +164,7 @@ def apply_action(name, action, target):
     return "failed to act."
 
 # =========================================================
-# GAME LOOP (SEQUENTIAL AI)
+# GAME LOOP (ACTIONS → CONTRIBUTIONS)
 # =========================================================
 
 def game_loop():
@@ -185,7 +185,9 @@ def game_loop():
                 "message": f"--- Turn {game['turn']} ---"
             })
 
-        # AI turns (one at a time)
+        # ===== PHASE 1: ACTIONS =====
+        planned = {}
+
         for name, agent_data in game["agents"].items():
             if not agent_data["alive"]:
                 continue
@@ -202,25 +204,44 @@ Project total: {game['project_total']}
 Rocket seats: {rocket_seats()}
 """
 
-            result = agent.respond(prompt)
+            decision = agent.respond(prompt)
+            planned[name] = decision
 
             with state_lock:
-                outcome = apply_action(name, result["action"], result["target"])
-
-                contrib = min(
-                    result["contribution"],
-                    agent_data["resources"]
+                outcome = apply_action(
+                    name,
+                    decision["action"],
+                    decision["target"]
                 )
-
-                agent_data["resources"] -= contrib
-                game["project_total"] += contrib
 
                 game["log"].append({
                     "speaker": name,
-                    "message": f"{result['action']} → {outcome} | Contributed {contrib}"
+                    "message": f"{decision['action']} → {outcome}"
                 })
 
             time.sleep(TURN_DELAY_SECONDS)
+
+        # ===== PHASE 2: CONTRIBUTIONS =====
+        with state_lock:
+            game["log"].append({
+                "speaker": "System",
+                "message": "💰 Contributions to the Project:"
+            })
+
+            for name, decision in planned.items():
+                agent_data = game["agents"][name]
+                if not agent_data["alive"]:
+                    continue
+
+                contrib = min(decision["contribution"], agent_data["resources"])
+                agent_data["resources"] -= contrib
+                game["project_total"] += contrib
+
+                if contrib > 0:
+                    game["log"].append({
+                        "speaker": name,
+                        "message": f"contributed {contrib} resources"
+                    })
 
         with state_lock:
             game["turn"] += 1
