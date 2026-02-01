@@ -67,7 +67,8 @@ game_session = {
     "human_target": None,
     "waiting_for_contribution": False,
     "human_contribution": None,
-    "num_starting_agents": 0
+    "num_starting_agents": 0,
+    "agent_memory": {}  # Track important events for each agent
 }
 
 # Seats thresholds for the rocket project
@@ -87,6 +88,171 @@ def calculate_available_seats(project_total, num_starting_agents):
     
     max_seats = max(0, num_starting_agents - 1)
     return min(seats, max_seats)
+
+# ------------------- Memory System -------------------
+
+def initialize_agent_memory(agent_names):
+    """Initialize memory tracking for all agents"""
+    memory = {}
+    for name in agent_names:
+        memory[name] = {
+            "times_invaded_by": {},      # {attacker: count}
+            "times_nuked_at_by": {},     # {attacker: count} - attempted nukes
+            "times_propagandized_by": {},# {attacker: count}
+            "invaded_targets": {},        # {target: count} - who I invaded
+            "contribution_pattern": [],   # Last 3 contributions
+            "alliance_score": {},         # {agent: score} - positive = ally, negative = enemy
+            "biggest_threat": None,       # Agent with most resources
+            "was_leader": False           # Was I ever project leader?
+        }
+    return memory
+
+def update_memory_for_action(memory, agent_name, action, target, state):
+    """Update memory based on an action taken"""
+    if not target or target not in memory:
+        return
+    
+    # Track attacks from perspective of victim
+    if action == "Invade":
+        if agent_name not in memory[target]["times_invaded_by"]:
+            memory[target]["times_invaded_by"][agent_name] = 0
+        memory[target]["times_invaded_by"][agent_name] += 1
+        
+        # Track from attacker's perspective
+        if target not in memory[agent_name]["invaded_targets"]:
+            memory[agent_name]["invaded_targets"][target] = 0
+        memory[agent_name]["invaded_targets"][target] += 1
+        
+        # Update alliance scores (attacking = negative relationship)
+        if agent_name not in memory[target]["alliance_score"]:
+            memory[target]["alliance_score"][agent_name] = 0
+        memory[target]["alliance_score"][agent_name] -= 2  # Being invaded hurts relationship
+        
+    elif action == "Nuke":
+        # Only track if nuke failed (target still alive) - shows intent
+        if state["agents"][target]["alive"]:
+            if agent_name not in memory[target]["times_nuked_at_by"]:
+                memory[target]["times_nuked_at_by"][agent_name] = 0
+            memory[target]["times_nuked_at_by"][agent_name] += 1
+        
+        if agent_name not in memory[target]["alliance_score"]:
+            memory[target]["alliance_score"][agent_name] = 0
+        memory[target]["alliance_score"][agent_name] -= 10  # Nuking is the ultimate betrayal
+        
+    elif action == "Propagandize":
+        if agent_name not in memory[target]["times_propagandized_by"]:
+            memory[target]["times_propagandized_by"][agent_name] = 0
+        memory[target]["times_propagandized_by"][agent_name] += 1
+        
+        if agent_name not in memory[target]["alliance_score"]:
+            memory[target]["alliance_score"][agent_name] = 0
+        memory[target]["alliance_score"][agent_name] -= 1
+
+def update_memory_for_contribution(memory, contributions, leader_name):
+    """Update memory based on contributions"""
+    for agent_name, amount in contributions.items():
+        if agent_name not in memory:
+            continue
+        
+        # Track contribution pattern (last 3)
+        memory[agent_name]["contribution_pattern"].append(amount)
+        if len(memory[agent_name]["contribution_pattern"]) > 3:
+            memory[agent_name]["contribution_pattern"].pop(0)
+        
+        # Track if became leader
+        if agent_name == leader_name:
+            memory[agent_name]["was_leader"] = True
+        
+        # Positive alliance score for those who contribute (cooperators)
+        if amount > 0:
+            for other_agent in memory:
+                if other_agent != agent_name:
+                    if agent_name not in memory[other_agent]["alliance_score"]:
+                        memory[other_agent]["alliance_score"][agent_name] = 0
+                    memory[other_agent]["alliance_score"][agent_name] += 0.5  # Small boost for cooperating
+
+def update_threat_assessment(memory, state):
+    """Update who is the biggest threat based on resources"""
+    agents_state = state["agents"]
+    for agent_name in memory:
+        if not agents_state[agent_name]["alive"]:
+            continue
+        
+        # Find agent with most resources (excluding self)
+        max_resources = -1
+        biggest_threat = None
+        for other_name, stats in agents_state.items():
+            if other_name != agent_name and stats["alive"] and stats["resources"] > max_resources:
+                max_resources = stats["resources"]
+                biggest_threat = other_name
+        
+        memory[agent_name]["biggest_threat"] = biggest_threat
+
+def build_memory_context(name, memory, state):
+    """Build compact memory context for an agent (aim for <100 tokens)"""
+    if name not in memory:
+        return ""
+    
+    agent_mem = memory[name]
+    context = []
+    
+    # Grudges - who attacked me?
+    attackers = []
+    for attacker, count in agent_mem["times_invaded_by"].items():
+        if state["agents"].get(attacker, {}).get("alive", False):
+            attackers.append(f"{attacker}({count}x)")
+    if attackers:
+        context.append(f"GRUDGES - Invaded by: {', '.join(attackers)}")
+    
+    # Who tried to nuke me?
+    nukers = []
+    for nuker, count in agent_mem["times_nuked_at_by"].items():
+        if state["agents"].get(nuker, {}).get("alive", False):
+            nukers.append(f"{nuker}({count}x)")
+    if nukers:
+        context.append(f"ATTEMPTED NUKES by: {', '.join(nukers)}")
+    
+    # Alliances - identify friends (positive score) and enemies (negative score)
+    allies = []
+    enemies = []
+    for other_agent, score in agent_mem["alliance_score"].items():
+        if not state["agents"].get(other_agent, {}).get("alive", False):
+            continue
+        if score >= 2:
+            allies.append(f"{other_agent}(+{int(score)})")
+        elif score <= -3:
+            enemies.append(f"{other_agent}({int(score)})")
+    
+    if allies:
+        context.append(f"ALLIES: {', '.join(allies[:3])}")  # Top 3 allies
+    if enemies:
+        context.append(f"ENEMIES: {', '.join(enemies[:3])}")  # Top 3 enemies
+    
+    # Contribution pattern - am I a contributor or hoarder?
+    if len(agent_mem["contribution_pattern"]) > 0:
+        avg_contrib = sum(agent_mem["contribution_pattern"]) / len(agent_mem["contribution_pattern"])
+        if avg_contrib > 2:
+            context.append(f"You've been contributing (avg {avg_contrib:.1f}/turn)")
+        elif avg_contrib == 0:
+            context.append(f"You've never contributed to PROJECT")
+    
+    # Biggest current threat
+    if agent_mem["biggest_threat"]:
+        threat = agent_mem["biggest_threat"]
+        threat_resources = state["agents"][threat]["resources"]
+        if threat_resources >= 6:
+            context.append(f"⚠️ THREAT: {threat} has {threat_resources}R (nuke range!)")
+    
+    # Who have I been targeting?
+    if agent_mem["invaded_targets"]:
+        top_target = max(agent_mem["invaded_targets"].items(), key=lambda x: x[1])
+        if top_target[1] >= 2:
+            context.append(f"You've invaded {top_target[0]} {top_target[1]} times")
+    
+    # Return compact context
+    if context:
+        return "MEMORY:\n" + "\n".join(context[:5]) + "\n\n"  # Max 5 memory items
+    return ""
 
 # ------------------- Helper Functions -------------------
 
@@ -211,14 +377,19 @@ def apply_action(name, action, target, state):
         
         return result_message
 
-def build_minimal_prompt(name, state, conversation):
-    """Build minimal strategic prompt - just current stats and last actions"""
+def build_minimal_prompt(name, state, conversation, memory):
+    """Build minimal strategic prompt with memory context - just current stats and memory"""
     agents_state = state["agents"]
     alive_count = len([n for n, s in agents_state.items() if s["alive"]])
     available_seats = state.get("available_seats", 0)
     
     # Minimal header
     prompt = f"Turn {state['turn']}: {alive_count} alive, {available_seats} seats, {state['project_total']} PROJECT\n\n"
+    
+    # Add memory context (compact, ~50-100 tokens)
+    memory_context = build_memory_context(name, memory, state)
+    if memory_context:
+        prompt += memory_context
     
     # Your status
     my_stats = agents_state[name]
@@ -245,7 +416,7 @@ def build_minimal_prompt(name, state, conversation):
 
 # ------------------- Parallel Processing Functions -------------------
 
-def process_agent_turn(name, agent, state, conversation):
+def process_agent_turn(name, agent, state, conversation, memory):
     """Process a single agent's complete turn (action + contribution) in one API call"""
     if not state["agents"][name]["alive"]:
         return None
@@ -253,8 +424,8 @@ def process_agent_turn(name, agent, state, conversation):
     print(f"🎯 {name}'s turn")
     
     try:
-        # Build minimal prompt
-        minimal_prompt = build_minimal_prompt(name, state, conversation)
+        # Build minimal prompt with memory
+        minimal_prompt = build_minimal_prompt(name, state, conversation, memory)
         
         # Single API call for both action and contribution
         result = agent.respond(minimal_prompt)
@@ -302,6 +473,10 @@ def run_game(num_agents, has_human):
     agent_names = list(game_session["agents"].keys())
     conversation = game_session["conversation"]
     state = game_session["game_state"]
+    
+    # Initialize memory system
+    memory = initialize_agent_memory(agent_names)
+    game_session["agent_memory"] = memory
 
     human_name = game_session["human_player"]
     
@@ -399,6 +574,11 @@ def run_game(num_agents, has_human):
             
             # Apply action
             action_result = apply_action(human_name, chosen_action, chosen_target, state)
+            
+            # Update memory based on human action
+            if chosen_target:
+                update_memory_for_action(memory, human_name, chosen_action, chosen_target, state)
+            
             message_text = f"{chosen_action}"
             if action_result:
                 message_text += f" — {action_result}"
@@ -459,7 +639,8 @@ def run_game(num_agents, has_human):
                         name,
                         game_session["agents"][name],
                         state,
-                        conversation
+                        conversation,
+                        memory  # Pass memory
                     ): name for name in ai_agents
                 }
                 
@@ -475,6 +656,11 @@ def run_game(num_agents, has_human):
                         
                         # Apply action
                         action_result = apply_action(name, chosen_action, chosen_target, state)
+                        
+                        # Update memory based on action
+                        if chosen_target:
+                            update_memory_for_action(memory, name, chosen_action, chosen_target, state)
+                        
                         message_text = f"{chosen_action}"
                         if action_result:
                             message_text += f" — {action_result}"
@@ -514,17 +700,26 @@ def run_game(num_agents, has_human):
                     state["project_leader"] = leader
                     state["agents"][leader]["influence"] += 1
                     
+                    # Update memory for contributions
+                    update_memory_for_contribution(memory, round_contributions, leader)
+                    
                     conversation.append({
                         "speaker": "System",
                         "message": f"🏆 {leader} is PROJECT LEADER! (+1 influence)",
                         "time": time.time()
                     })
                 else:
+                    # Tie - update memory but no leader
+                    update_memory_for_contribution(memory, round_contributions, None)
+                    
                     conversation.append({
                         "speaker": "System",
                         "message": f"🤝 TIE - no leader",
                         "time": time.time()
                     })
+        
+        # Update threat assessment for all agents
+        update_threat_assessment(memory, state)
         
         # Update seats
         alive_count = len([name for name in agent_names if state["agents"][name]["alive"]])
@@ -569,6 +764,7 @@ def start_game_route():
 
         game_session["conversation"] = []
         game_session["agents"] = {}
+        game_session["agent_memory"] = {}  # Initialize memory
         game_session["human_player"] = None
         game_session["waiting_for_human"] = False
         game_session["human_action"] = None
