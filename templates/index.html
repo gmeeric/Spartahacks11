@@ -1067,6 +1067,7 @@ function updateGame() {
             const agent = data.agents[name];
             const isHuman = name === data.human_player;
             const isLeader = name === data.project_leader;
+            const modelName = data.agent_models ? data.agent_models[name] : '';
             const card = document.createElement('div');
             card.className = 'agent-card' + 
                 (agent.alive ? '' : ' dead') + 
@@ -1076,6 +1077,8 @@ function updateGame() {
             let badges = '';
             if (isHuman) {
                 badges += '<div class="status-badge human">HUMAN</div>';
+            } else if (modelName) {
+                badges += `<div class="status-badge" style="background: rgba(100, 150, 255, 0.2); color: #6496ff; font-size: 0.75rem;">🤖 ${modelName}</div>`;
             }
             if (isLeader && agent.alive) {
                 badges += '<div class="status-badge leader">LEADER 🚀</div>';
