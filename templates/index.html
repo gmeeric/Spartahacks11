@@ -36,6 +36,7 @@ body {
     position: relative;
 }
 
+/* Animated background */
 body::before {
     content: '';
     position: fixed;
@@ -64,6 +65,7 @@ body::before {
     padding: 40px 20px;
 }
 
+/* Header */
 .header {
     text-align: center;
     margin-bottom: 50px;
@@ -107,6 +109,7 @@ h1 {
     letter-spacing: 2px;
 }
 
+/* Project Stats Display */
 .project-stats {
     background: linear-gradient(135deg, rgba(255, 165, 0, 0.2), rgba(255, 140, 0, 0.1));
     border: 2px solid var(--project-color);
@@ -151,6 +154,7 @@ h1 {
     color: var(--project-color);
 }
 
+/* Controls */
 .controls {
     display: flex;
     gap: 15px;
@@ -166,7 +170,7 @@ h1 {
     to { opacity: 1; }
 }
 
-input[type="text"] {
+input[type="number"] {
     padding: 15px 20px;
     font-size: 16px;
     font-family: 'Rajdhani', sans-serif;
@@ -174,14 +178,31 @@ input[type="text"] {
     border: 2px solid var(--accent-cyan);
     border-radius: 8px;
     color: var(--text-primary);
-    width: 300px;
+    width: 200px;
     transition: all 0.3s;
 }
 
-input[type="text"]:focus {
+input[type="number"]:focus {
     outline: none;
     border-color: var(--accent-magenta);
     box-shadow: 0 0 20px rgba(255, 0, 229, 0.3);
+}
+
+input[type="checkbox"] {
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    accent-color: var(--accent-cyan);
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
 }
 
 button {
@@ -237,6 +258,7 @@ button:disabled {
     cursor: not-allowed;
 }
 
+/* Status */
 .status {
     text-align: center;
     padding: 20px;
@@ -261,11 +283,245 @@ button:disabled {
     color: var(--accent-yellow);
 }
 
+.status.waiting {
+    background: linear-gradient(135deg, rgba(255, 0, 229, 0.2), rgba(255, 105, 180, 0.2));
+    border: 2px solid var(--accent-magenta);
+    color: var(--accent-magenta);
+    animation: pulse 1s ease-in-out infinite;
+}
+
+.status.contributing {
+    background: linear-gradient(135deg, rgba(255, 165, 0, 0.2), rgba(255, 140, 0, 0.2));
+    border: 2px solid var(--project-color);
+    color: var(--project-color);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
 @keyframes pulse {
     0%, 100% { box-shadow: 0 0 20px rgba(0, 255, 136, 0.3); }
     50% { box-shadow: 0 0 40px rgba(0, 255, 136, 0.6); }
 }
 
+/* Human Action Panel */
+.human-action-panel {
+    display: none;
+    background: var(--bg-card);
+    border: 3px solid var(--accent-magenta);
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 30px;
+    animation: slideDown 0.5s ease-out;
+}
+
+.human-action-panel.active {
+    display: block;
+}
+
+.action-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.8rem;
+    color: var(--accent-magenta);
+    margin-bottom: 20px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.action-buttons {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+}
+
+.action-btn {
+    padding: 20px;
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(0, 150, 200, 0.2));
+    border: 2px solid var(--accent-cyan);
+    color: var(--text-primary);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-transform: uppercase;
+}
+
+.action-btn:hover {
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.4), rgba(0, 150, 200, 0.4));
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px rgba(0, 212, 255, 0.5);
+}
+
+.action-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.action-cost {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 5px;
+}
+
+/* Target Selection */
+.target-selection {
+    margin-bottom: 25px;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    border: 2px solid rgba(0, 212, 255, 0.3);
+}
+
+.target-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.1rem;
+    color: var(--accent-cyan);
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.target-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 15px;
+}
+
+.target-btn {
+    padding: 12px 20px;
+    background: rgba(0, 212, 255, 0.1);
+    border: 2px solid rgba(0, 212, 255, 0.3);
+    color: var(--text-primary);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.target-btn:hover {
+    background: rgba(0, 212, 255, 0.2);
+    border-color: var(--accent-cyan);
+    transform: translateY(-2px);
+}
+
+.target-btn.selected {
+    background: var(--accent-cyan);
+    border-color: var(--accent-cyan);
+    color: var(--bg-dark);
+    font-weight: 700;
+    box-shadow: 0 0 15px rgba(0, 212, 255, 0.6);
+}
+
+.target-btn.dead {
+    opacity: 0.3;
+    cursor: not-allowed;
+    background: rgba(255, 51, 102, 0.1);
+    border-color: rgba(255, 51, 102, 0.3);
+}
+
+.selected-target {
+    text-align: center;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1rem;
+    color: var(--accent-yellow);
+    padding: 10px;
+    background: rgba(255, 235, 59, 0.1);
+    border-radius: 6px;
+}
+
+.selected-target.has-target {
+    color: var(--accent-cyan);
+    background: rgba(0, 212, 255, 0.1);
+}
+
+/* Contribution Panel */
+.contribution-panel {
+    display: none;
+    background: var(--bg-card);
+    border: 3px solid var(--project-color);
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 30px;
+    animation: slideDown 0.5s ease-out;
+}
+
+.contribution-panel.active {
+    display: block;
+}
+
+.contribution-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.8rem;
+    color: var(--project-color);
+    margin-bottom: 20px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.contribution-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.contribution-slider-container {
+    width: 100%;
+    max-width: 500px;
+}
+
+.contribution-slider {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 165, 0, 0.2);
+    border-radius: 5px;
+    outline: none;
+    -webkit-appearance: none;
+}
+
+.contribution-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 25px;
+    height: 25px;
+    background: var(--project-color);
+    cursor: pointer;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(255, 165, 0, 0.5);
+}
+
+.contribution-slider::-moz-range-thumb {
+    width: 25px;
+    height: 25px;
+    background: var(--project-color);
+    cursor: pointer;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(255, 165, 0, 0.5);
+}
+
+.contribution-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 2.5rem;
+    color: var(--project-color);
+    font-weight: 700;
+}
+
+.contribution-submit {
+    padding: 15px 40px;
+    background: linear-gradient(135deg, var(--project-color), #ff8c00);
+    color: white;
+    font-size: 1.2rem;
+}
+
+.contribution-submit:hover {
+    box-shadow: 0 8px 25px rgba(255, 165, 0, 0.6);
+}
+
+/* Game Panel */
 .game-panel {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -283,6 +539,15 @@ button:disabled {
     transition: all 0.3s;
     position: relative;
     overflow: hidden;
+}
+
+.agent-card.human {
+    border: 2px solid var(--accent-magenta);
+}
+
+.agent-card.leader {
+    border: 2px solid var(--project-color);
+    box-shadow: 0 0 20px rgba(255, 165, 0, 0.3);
 }
 
 .agent-card::before {
@@ -325,6 +590,14 @@ button:disabled {
     color: var(--accent-cyan);
 }
 
+.agent-card.human .agent-name {
+    color: var(--accent-magenta);
+}
+
+.agent-card.leader .agent-name {
+    color: var(--project-color);
+}
+
 .agent-card.dead .agent-name {
     text-decoration: line-through;
     color: var(--danger);
@@ -362,6 +635,17 @@ button:disabled {
     color: var(--danger);
 }
 
+.status-badge.human {
+    background: rgba(255, 0, 229, 0.2);
+    color: var(--accent-magenta);
+}
+
+.status-badge.leader {
+    background: rgba(255, 165, 0, 0.2);
+    color: var(--project-color);
+}
+
+/* Chat Container */
 .chat-section {
     animation: fadeIn 1s ease-out 0.9s backwards;
 }
@@ -412,6 +696,11 @@ button:disabled {
     animation: messageSlide 0.4s ease-out;
 }
 
+.message.human-msg {
+    border-left-color: var(--accent-magenta);
+    background: rgba(255, 0, 229, 0.1);
+}
+
 @keyframes messageSlide {
     from {
         opacity: 0;
@@ -430,6 +719,10 @@ button:disabled {
     font-family: 'Orbitron', sans-serif;
 }
 
+.speaker-name.human {
+    color: var(--accent-magenta);
+}
+
 .message-text {
     color: var(--text-secondary);
     font-size: 1rem;
@@ -446,6 +739,7 @@ button:disabled {
     animation: messageSlide 0.4s ease-out;
 }
 
+/* Responsive */
 @media (max-width: 768px) {
     h1 {
         font-size: 2.5rem;
@@ -454,6 +748,10 @@ button:disabled {
     .game-panel {
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     }
+    
+    .action-buttons {
+        grid-template-columns: 1fr;
+    }
 }
 </style>
 </head>
@@ -461,11 +759,12 @@ button:disabled {
 <div class="container">
     <div class="header">
         <h1>AI Battleground</h1>
-        <p class="subtitle">Watch AI agents battle for survival and rocket seats!</p>
+        <p class="subtitle">Watch AI agents battle for supremacy - or join the fight yourself!</p>
     </div>
 
     <div class="status paused" id="status">Ready to Deploy Agents</div>
 
+    <!-- Project Stats Display -->
     <div class="project-stats" id="projectStats" style="display: none;">
         <div class="project-title">🚀 THE PROJECT</div>
         <div class="project-info">
@@ -474,16 +773,73 @@ button:disabled {
                 <div class="project-stat-value" id="projectTotal">0</div>
             </div>
             <div class="project-stat">
-                <div class="project-stat-label">Rocket Seats</div>
+                <div class="project-stat-label">Available Seats</div>
                 <div class="project-stat-value" id="availableSeats">0</div>
+            </div>
+            <div class="project-stat">
+                <div class="project-stat-label">Current Leader</div>
+                <div class="project-stat-value" id="projectLeader">None</div>
             </div>
         </div>
     </div>
 
     <div class="controls">
-        <input type="text" id="agent_names" placeholder="Agent names (comma-separated)" value="Alice,Bob,Charlie,Diana">
+        <input type="number" id="num_agents" placeholder="Number of agents" value="10" min="2" max="10">
+        <label class="checkbox-label">
+            <input type="checkbox" id="include_human">
+            Play as Agent1
+        </label>
         <button class="start-btn" onclick="startGame()">Launch Battle</button>
         <button class="stop-btn" onclick="stopGame()">Emergency Stop</button>
+    </div>
+
+    <!-- Human Action Panel -->
+    <div class="human-action-panel" id="humanActionPanel">
+        <div class="action-title">🎮 Your Turn - Choose Action</div>
+        
+        <!-- Target Selection -->
+        <div class="target-selection" id="targetSelection">
+            <div class="target-label">Select Target (for attacks only):</div>
+            <div class="target-buttons" id="targetButtons">
+                <!-- Target buttons will be dynamically generated -->
+            </div>
+            <div class="selected-target" id="selectedTargetDisplay">No target selected</div>
+        </div>
+        
+        <div class="action-buttons">
+            <button class="action-btn" onclick="submitAction('Produce')">
+                Produce
+                <span class="action-cost">+2 Resources</span>
+            </button>
+            <button class="action-btn" onclick="submitAction('Influence')">
+                Influence
+                <span class="action-cost">+1 Influence</span>
+            </button>
+            <button class="action-btn" id="invadeBtn" onclick="submitAction('Invade')">
+                Invade
+                <span class="action-cost">-1 Influence</span>
+            </button>
+            <button class="action-btn" id="propagandizeBtn" onclick="submitAction('Propagandize')">
+                Propagandize
+                <span class="action-cost">-1 Resource</span>
+            </button>
+            <button class="action-btn" id="nukeBtn" onclick="submitAction('Nuke')">
+                Nuke
+                <span class="action-cost">-8 Resources</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Contribution Panel -->
+    <div class="contribution-panel" id="contributionPanel">
+        <div class="contribution-title">🚀 Contribute to The Project</div>
+        <div class="contribution-controls">
+            <div class="contribution-value" id="contributionValue">0</div>
+            <div class="contribution-slider-container">
+                <input type="range" min="0" max="0" value="0" class="contribution-slider" id="contributionSlider">
+            </div>
+            <button class="contribution-submit" onclick="submitContribution()">Contribute Resources</button>
+        </div>
     </div>
 
     <div class="game-panel" id="agents-panel"></div>
@@ -497,32 +853,85 @@ button:disabled {
 <script>
 let updateInterval;
 let lastMessageCount = 0;
+let humanPlayerName = null;
+let contributionPanelInitialized = false;
+let selectedTarget = null;
+let targetButtonsInitialized = false;
 
-function startGame() {
-    const namesInput = document.getElementById('agent_names').value;
-    const names = namesInput.split(',').map(n => n.trim()).filter(n => n);
+function selectTarget(targetName) {
+    selectedTarget = targetName;
     
-    if (names.length < 2) {
-        alert('Please enter at least 2 agent names separated by commas');
+    const targetButtons = document.querySelectorAll('.target-btn');
+    targetButtons.forEach(btn => {
+        if (btn.dataset.target === targetName) {
+            btn.classList.add('selected');
+        } else {
+            btn.classList.remove('selected');
+        }
+    });
+    
+    const display = document.getElementById('selectedTargetDisplay');
+    display.textContent = `Target: ${targetName}`;
+    display.classList.add('has-target');
+}
+
+function updateTargetButtons(gameState) {
+    if (targetButtonsInitialized) {
         return;
     }
+    
+    const targetButtonsContainer = document.getElementById('targetButtons');
+    targetButtonsContainer.innerHTML = '';
+    
+    for (const agentName in gameState.agents) {
+        if (agentName === humanPlayerName) continue;
+        
+        const agent = gameState.agents[agentName];
+        const btn = document.createElement('button');
+        btn.className = 'target-btn' + (agent.alive ? '' : ' dead');
+        btn.textContent = agentName;
+        btn.dataset.target = agentName;
+        
+        if (agent.alive) {
+            btn.onclick = () => selectTarget(agentName);
+        } else {
+            btn.disabled = true;
+        }
+        
+        targetButtonsContainer.appendChild(btn);
+    }
+    
+    selectedTarget = null;
+    const display = document.getElementById('selectedTargetDisplay');
+    display.textContent = 'No target selected';
+    display.classList.remove('has-target');
+    
+    targetButtonsInitialized = true;
+}
+
+function startGame() {
+    const num_agents = document.getElementById('num_agents').value || 10;
+    const include_human = document.getElementById('include_human').checked;
     
     fetch('/api/start', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({names: names})
+        body: JSON.stringify({num_agents, include_human})
     })
     .then(r => r.json())
     .then(data => {
-        console.log('Game started:', data);
+        humanPlayerName = data.human_name;
         document.getElementById('chat').innerHTML = '';
         lastMessageCount = 0;
+        contributionPanelInitialized = false;
+        targetButtonsInitialized = false;
+        selectedTarget = null;
         document.getElementById('projectStats').style.display = 'block';
         updateInterval = setInterval(updateGame, 500);
     })
     .catch(err => {
         console.error('Error starting game:', err);
-        alert('Failed to start game. Check console for details.');
+        alert('Failed to start game. Please try again.');
     });
 }
 
@@ -530,87 +939,193 @@ function stopGame() {
     fetch('/api/stop', {method: 'POST'})
     .then(() => {
         clearInterval(updateInterval);
-        console.log('Game stopped');
+        document.getElementById('humanActionPanel').classList.remove('active');
+        document.getElementById('contributionPanel').classList.remove('active');
+        contributionPanelInitialized = false;
+        targetButtonsInitialized = false;
+        selectedTarget = null;
     })
     .catch(err => console.error('Error stopping game:', err));
 }
 
+function submitAction(action) {
+    fetch('/api/human_action', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            action: action,
+            target: selectedTarget
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        console.log('Action submitted:', data);
+        document.getElementById('humanActionPanel').classList.remove('active');
+        selectedTarget = null;
+        targetButtonsInitialized = false;
+    })
+    .catch(err => console.error('Error submitting action:', err));
+}
+
+function submitContribution() {
+    const contribution = parseInt(document.getElementById('contributionSlider').value);
+    
+    fetch('/api/human_contribution', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({contribution})
+    })
+    .then(r => r.json())
+    .then(data => {
+        console.log('Contribution submitted:', data);
+        document.getElementById('contributionPanel').classList.remove('active');
+        contributionPanelInitialized = false;
+    })
+    .catch(err => console.error('Error submitting contribution:', err));
+}
+
+function updateActionButtons(myStats, gameState) {
+    document.getElementById('invadeBtn').disabled = myStats.influence < 1;
+    document.getElementById('propagandizeBtn').disabled = myStats.resources < 1;
+    document.getElementById('nukeBtn').disabled = myStats.resources < 8;
+    
+    updateTargetButtons(gameState);
+}
+
+function updateContributionPanel(myStats) {
+    const slider = document.getElementById('contributionSlider');
+    
+    if (!contributionPanelInitialized) {
+        slider.max = myStats.resources;
+        slider.value = 0;
+        document.getElementById('contributionValue').textContent = '0';
+        
+        slider.oninput = function() {
+            document.getElementById('contributionValue').textContent = this.value;
+        };
+        
+        contributionPanelInitialized = true;
+    }
+}
+
 function updateGame() {
-    // Update game state
-    fetch('/api/state')
+    fetch('/api/game_state')
     .then(r => r.json())
     .then(data => {
         const statusDiv = document.getElementById('status');
         
-        if (data.running) {
-            statusDiv.textContent = `⚔️ Turn ${data.turn} - Battle in Progress`;
-            statusDiv.className = 'status running';
+        if (data.waiting_for_contribution) {
+            statusDiv.textContent = `🚀 Turn ${data.turn}/${data.max_turns} - Contribution Phase - Waiting for ${data.human_player}...`;
+            statusDiv.className = 'status contributing';
+            
+            const panel = document.getElementById('contributionPanel');
+            if (!panel.classList.contains('active')) {
+                panel.classList.add('active');
+            }
+            
+            if (data.agents[data.human_player]) {
+                updateContributionPanel(data.agents[data.human_player]);
+            }
         } else {
-            statusDiv.textContent = '⏸️ Battle Paused';
+            const panel = document.getElementById('contributionPanel');
+            if (panel.classList.contains('active')) {
+                panel.classList.remove('active');
+                contributionPanelInitialized = false;
+            }
+        }
+        
+        if (data.waiting_for_human) {
+            statusDiv.textContent = `⏳ Turn ${data.turn}/${data.max_turns} - Waiting for ${data.human_player} to act...`;
+            statusDiv.className = 'status waiting';
+            
+            const panel = document.getElementById('humanActionPanel');
+            if (!panel.classList.contains('active')) {
+                panel.classList.add('active');
+                targetButtonsInitialized = false;
+            }
+            
+            if (data.agents[data.human_player]) {
+                updateActionButtons(data.agents[data.human_player], data);
+            }
+        } else if (data.running) {
+            statusDiv.textContent = `Turn ${data.turn}/${data.max_turns} - Battle in Progress`;
+            statusDiv.className = 'status running';
+            document.getElementById('humanActionPanel').classList.remove('active');
+        } else if (!data.waiting_for_contribution) {
+            statusDiv.textContent = 'Battle Paused';
             statusDiv.className = 'status paused';
+            document.getElementById('humanActionPanel').classList.remove('active');
         }
 
-        // Update project stats
-        document.getElementById('projectTotal').textContent = data.project || 0;
-        const seats = Math.min(8, Math.floor((data.project || 0) / 10));
-        document.getElementById('availableSeats').textContent = seats;
+        document.getElementById('projectTotal').textContent = data.project_total || 0;
+        document.getElementById('availableSeats').textContent = data.available_seats || 0;
+        document.getElementById('projectLeader').textContent = data.project_leader || 'None';
 
-        // Update agent cards
         const panel = document.getElementById('agents-panel');
         panel.innerHTML = '';
         for (const name in data.agents) {
             const agent = data.agents[name];
+            const isHuman = name === data.human_player;
+            const isLeader = name === data.project_leader;
             const card = document.createElement('div');
-            card.className = 'agent-card' + (agent.alive ? '' : ' dead');
+            card.className = 'agent-card' + 
+                (agent.alive ? '' : ' dead') + 
+                (isHuman ? ' human' : '') +
+                (isLeader ? ' leader' : '');
             
-            let badge = agent.alive ? 
-                '<div class="status-badge alive">ACTIVE</div>' : 
-                '<div class="status-badge dead">ELIMINATED</div>';
+            let badges = '';
+            if (isHuman) {
+                badges += '<div class="status-badge human">HUMAN</div>';
+            }
+            if (isLeader && agent.alive) {
+                badges += '<div class="status-badge leader">LEADER 🚀</div>';
+            }
+            if (!agent.alive) {
+                badges += '<div class="status-badge dead">ELIMINATED</div>';
+            } else if (!isHuman && !isLeader) {
+                badges += '<div class="status-badge alive">ACTIVE</div>';
+            }
             
             card.innerHTML = `
-                <div class="agent-name">${name}</div>
+                <div class="agent-name ${isHuman ? 'human' : ''} ${isLeader ? 'leader' : ''}">${name}${isHuman ? ' 🎮' : ''}${isLeader ? ' 🚀' : ''}</div>
                 <div class="agent-stats">
                     Resources: <span class="stat-value">${agent.resources}</span><br>
                     Influence: <span class="stat-value">${agent.influence}</span>
                 </div>
-                ${badge}
+                ${badges}
             `;
             panel.appendChild(card);
         }
 
-        if (!data.running) {
-            clearInterval(updateInterval);
-        }
-    })
-    .catch(err => console.error('Error updating state:', err));
-
-    // Update log
-    fetch('/api/log')
-    .then(r => r.json())
-    .then(logData => {
-        const chatDiv = document.getElementById('chat');
-        if (logData.length > lastMessageCount) {
-            for (let i = lastMessageCount; i < logData.length; i++) {
-                const msg = logData[i];
-                const msgDiv = document.createElement('div');
-                
-                if (msg.speaker === 'System') {
-                    msgDiv.className = 'system-message';
-                    msgDiv.textContent = msg.message;
-                } else {
-                    msgDiv.className = 'message';
-                    msgDiv.innerHTML = `
-                        <div class="speaker-name">${msg.speaker}</div>
-                        <div class="message-text">${msg.message}</div>
-                    `;
+        fetch('/api/conversation')
+        .then(r => r.json())
+        .then(convData => {
+            const chatDiv = document.getElementById('chat');
+            if (convData.conversation.length > lastMessageCount) {
+                for (let i = lastMessageCount; i < convData.conversation.length; i++) {
+                    const msg = convData.conversation[i];
+                    const msgDiv = document.createElement('div');
+                    if (msg.speaker === 'System') {
+                        msgDiv.className = 'system-message';
+                        msgDiv.textContent = msg.message;
+                    } else {
+                        const isHuman = msg.speaker === humanPlayerName;
+                        msgDiv.className = 'message' + (isHuman ? ' human-msg' : '');
+                        msgDiv.innerHTML = `
+                            <div class="speaker-name ${isHuman ? 'human' : ''}">${msg.speaker}${isHuman ? ' 🎮' : ''}</div>
+                            <div class="message-text">${msg.message}</div>
+                        `;
+                    }
+                    chatDiv.appendChild(msgDiv);
                 }
-                chatDiv.appendChild(msgDiv);
+                lastMessageCount = convData.conversation.length;
+                chatDiv.scrollTop = chatDiv.scrollHeight;
             }
-            lastMessageCount = logData.length;
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-        }
+        });
+
+        if (!data.running) clearInterval(updateInterval);
     })
-    .catch(err => console.error('Error updating log:', err));
+    .catch(err => console.error('Error updating game:', err));
 }
 </script>
 </body>
