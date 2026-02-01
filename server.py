@@ -4,13 +4,11 @@ import threading
 import time
 import random
 import os
-from concurrent.futures import ThreadPoolExecutor
-import concurrent.futures
 
 app = Flask(__name__)
 CORS(app)
 
-# Lock to protect game state modifications during parallel processing
+# Lock to protect game state modifications
 state_lock = threading.Lock()
 
 # Import ChatAgent
@@ -68,7 +66,7 @@ game_session = {
     "waiting_for_contribution": False,
     "human_contribution": None,
     "num_starting_agents": 0,
-    "agent_memory": {}  # Track important events for each agent
+    "agent_memory": {}
 }
 
 # Seats thresholds for the rocket project
@@ -76,6 +74,8 @@ SEATS_THRESHOLDS = [
     (0, 0), (10, 1), (20, 2), (30, 3), (40, 4),
     (50, 5), (60, 6), (70, 7), (80, 8)
 ]
+
+TURN_DELAY = 3  # 3 second delay between each agent's turn
 
 def calculate_available_seats(project_total, num_starting_agents):
     """Calculate how many seats are available based on project total"""
@@ -96,14 +96,14 @@ def initialize_agent_memory(agent_names):
     memory = {}
     for name in agent_names:
         memory[name] = {
-            "times_invaded_by": {},      # {attacker: count}
-            "times_nuked_at_by": {},     # {attacker: count} - attempted nukes
-            "times_propagandized_by": {},# {attacker: count}
-            "invaded_targets": {},        # {target: count} - who I invaded
-            "contribution_pattern": [],   # Last 3 contributions
-            "alliance_score": {},         # {agent: score} - positive = ally, negative = enemy
-            "biggest_threat": None,       # Agent with most resources
-            "was_leader": False           # Was I ever project leader?
+            "times_invaded_by": {},
+            "times_nuked_at_by": {},
+            "times_propagandized_by": {},
+            "invaded_targets": {},
+            "contribution_pattern": [],
+            "alliance_score": {},
+            "biggest_threat": None,
+            "was_leader": False
         }
     return memory
 
@@ -112,24 +112,20 @@ def update_memory_for_action(memory, agent_name, action, target, state):
     if not target or target not in memory:
         return
     
-    # Track attacks from perspective of victim
     if action == "Invade":
         if agent_name not in memory[target]["times_invaded_by"]:
             memory[target]["times_invaded_by"][agent_name] = 0
         memory[target]["times_invaded_by"][agent_name] += 1
         
-        # Track from attacker's perspective
         if target not in memory[agent_name]["invaded_targets"]:
             memory[agent_name]["invaded_targets"][target] = 0
         memory[agent_name]["invaded_targets"][target] += 1
         
-        # Update alliance scores (attacking = negative relationship)
         if agent_name not in memory[target]["alliance_score"]:
             memory[target]["alliance_score"][agent_name] = 0
-        memory[target]["alliance_score"][agent_name] -= 2  # Being invaded hurts relationship
+        memory[target]["alliance_score"][agent_name] -= 2
         
     elif action == "Nuke":
-        # Only track if nuke failed (target still alive) - shows intent
         if state["agents"][target]["alive"]:
             if agent_name not in memory[target]["times_nuked_at_by"]:
                 memory[target]["times_nuked_at_by"][agent_name] = 0
@@ -137,7 +133,7 @@ def update_memory_for_action(memory, agent_name, action, target, state):
         
         if agent_name not in memory[target]["alliance_score"]:
             memory[target]["alliance_score"][agent_name] = 0
-        memory[target]["alliance_score"][agent_name] -= 10  # Nuking is the ultimate betrayal
+        memory[target]["alliance_score"][agent_name] -= 10
         
     elif action == "Propagandize":
         if agent_name not in memory[target]["times_propagandized_by"]:
@@ -154,22 +150,19 @@ def update_memory_for_contribution(memory, contributions, leader_name):
         if agent_name not in memory:
             continue
         
-        # Track contribution pattern (last 3)
         memory[agent_name]["contribution_pattern"].append(amount)
         if len(memory[agent_name]["contribution_pattern"]) > 3:
             memory[agent_name]["contribution_pattern"].pop(0)
         
-        # Track if became leader
         if agent_name == leader_name:
             memory[agent_name]["was_leader"] = True
         
-        # Positive alliance score for those who contribute (cooperators)
         if amount > 0:
             for other_agent in memory:
                 if other_agent != agent_name:
                     if agent_name not in memory[other_agent]["alliance_score"]:
                         memory[other_agent]["alliance_score"][agent_name] = 0
-                    memory[other_agent]["alliance_score"][agent_name] += 0.5  # Small boost for cooperating
+                    memory[other_agent]["alliance_score"][agent_name] += 0.5
 
 def update_threat_assessment(memory, state):
     """Update who is the biggest threat based on resources"""
@@ -178,7 +171,6 @@ def update_threat_assessment(memory, state):
         if not agents_state[agent_name]["alive"]:
             continue
         
-        # Find agent with most resources (excluding self)
         max_resources = -1
         biggest_threat = None
         for other_name, stats in agents_state.items():
@@ -189,14 +181,13 @@ def update_threat_assessment(memory, state):
         memory[agent_name]["biggest_threat"] = biggest_threat
 
 def build_memory_context(name, memory, state):
-    """Build compact memory context for an agent (aim for <100 tokens)"""
+    """Build compact memory context for an agent"""
     if name not in memory:
         return ""
     
     agent_mem = memory[name]
     context = []
     
-    # Grudges - who attacked me?
     attackers = []
     for attacker, count in agent_mem["times_invaded_by"].items():
         if state["agents"].get(attacker, {}).get("alive", False):
@@ -204,7 +195,6 @@ def build_memory_context(name, memory, state):
     if attackers:
         context.append(f"GRUDGES - Invaded by: {', '.join(attackers)}")
     
-    # Who tried to nuke me?
     nukers = []
     for nuker, count in agent_mem["times_nuked_at_by"].items():
         if state["agents"].get(nuker, {}).get("alive", False):
@@ -212,7 +202,6 @@ def build_memory_context(name, memory, state):
     if nukers:
         context.append(f"ATTEMPTED NUKES by: {', '.join(nukers)}")
     
-    # Alliances - identify friends (positive score) and enemies (negative score)
     allies = []
     enemies = []
     for other_agent, score in agent_mem["alliance_score"].items():
@@ -224,11 +213,10 @@ def build_memory_context(name, memory, state):
             enemies.append(f"{other_agent}({int(score)})")
     
     if allies:
-        context.append(f"ALLIES: {', '.join(allies[:3])}")  # Top 3 allies
+        context.append(f"ALLIES: {', '.join(allies[:3])}")
     if enemies:
-        context.append(f"ENEMIES: {', '.join(enemies[:3])}")  # Top 3 enemies
+        context.append(f"ENEMIES: {', '.join(enemies[:3])}")
     
-    # Contribution pattern - am I a contributor or hoarder?
     if len(agent_mem["contribution_pattern"]) > 0:
         avg_contrib = sum(agent_mem["contribution_pattern"]) / len(agent_mem["contribution_pattern"])
         if avg_contrib > 2:
@@ -236,22 +224,19 @@ def build_memory_context(name, memory, state):
         elif avg_contrib == 0:
             context.append(f"You've never contributed to PROJECT")
     
-    # Biggest current threat
     if agent_mem["biggest_threat"]:
         threat = agent_mem["biggest_threat"]
         threat_resources = state["agents"][threat]["resources"]
         if threat_resources >= 6:
             context.append(f"⚠️ THREAT: {threat} has {threat_resources}R (nuke range!)")
     
-    # Who have I been targeting?
     if agent_mem["invaded_targets"]:
         top_target = max(agent_mem["invaded_targets"].items(), key=lambda x: x[1])
         if top_target[1] >= 2:
             context.append(f"You've invaded {top_target[0]} {top_target[1]} times")
     
-    # Return compact context
     if context:
-        return "MEMORY:\n" + "\n".join(context[:5]) + "\n\n"  # Max 5 memory items
+        return "MEMORY:\n" + "\n".join(context[:5]) + "\n\n"
     return ""
 
 # ------------------- Helper Functions -------------------
@@ -319,7 +304,7 @@ def apply_action(name, action, target, state):
             
         elif action == "Invade":
             if agents_state[name]["influence"] < 1:
-                return "tried to invade but lost influence"
+                return "tried to invade but has no influence"
             
             agents_state[name]["influence"] -= 1
             valid_targets = get_valid_targets_for_invade(name, state)
@@ -339,7 +324,7 @@ def apply_action(name, action, target, state):
                 
         elif action == "Propagandize":
             if agents_state[name]["resources"] < 1:
-                return "tried to propagandize but lost resources"
+                return "tried to propagandize but has no resources"
             
             agents_state[name]["resources"] -= 1
             valid_targets = get_valid_targets_for_propagandize(name, state)
@@ -359,7 +344,7 @@ def apply_action(name, action, target, state):
                 
         elif action == "Nuke":
             if agents_state[name]["resources"] < 8:
-                return "tried to nuke but lost resources"
+                return "tried to nuke but has insufficient resources"
             
             agents_state[name]["resources"] -= 8
             valid_targets = get_valid_targets_for_nuke(name, state)
@@ -378,32 +363,27 @@ def apply_action(name, action, target, state):
         return result_message
 
 def build_minimal_prompt(name, state, conversation, memory):
-    """Build minimal strategic prompt with memory context - just current stats and memory"""
+    """Build minimal strategic prompt with memory context"""
     agents_state = state["agents"]
     alive_count = len([n for n, s in agents_state.items() if s["alive"]])
     available_seats = state.get("available_seats", 0)
     
-    # Minimal header
     prompt = f"Turn {state['turn']}: {alive_count} alive, {available_seats} seats, {state['project_total']} PROJECT\n\n"
     
-    # Add memory context (compact, ~50-100 tokens)
     memory_context = build_memory_context(name, memory, state)
     if memory_context:
         prompt += memory_context
     
-    # Your status
     my_stats = agents_state[name]
     prompt += f"YOU: R={my_stats['resources']}, I={my_stats['influence']}\n\n"
     
-    # Opponents with last action only
     prompt += "OPPONENTS:\n"
     alive_opponents = [(n, s) for n, s in agents_state.items() if n != name and s["alive"]]
     alive_opponents.sort(key=lambda x: x[1]["resources"], reverse=True)
     
     for opponent_name, stats in alive_opponents:
-        # Find last action by this opponent
         last_action = "..."
-        for msg in reversed(conversation[-20:]):  # Only check last 20 messages
+        for msg in reversed(conversation[-20:]):
             if msg.get('speaker') == opponent_name:
                 last_action = msg['message'].split('—')[0].strip()
                 break
@@ -414,73 +394,20 @@ def build_minimal_prompt(name, state, conversation, memory):
     
     return prompt
 
-# ------------------- Parallel Processing Functions -------------------
-
-def process_agent_turn(name, agent, state, conversation, memory):
-    """Process a single agent's complete turn (action + contribution) in one API call"""
-    if not state["agents"][name]["alive"]:
-        return None
-    
-    print(f"🎯 {name}'s turn")
-    
-    try:
-        # Build minimal prompt with memory
-        minimal_prompt = build_minimal_prompt(name, state, conversation, memory)
-        
-        # Single API call for both action and contribution
-        result = agent.respond(minimal_prompt)
-        chosen_action = result["action"]
-        chosen_target = result.get("target", None)
-        contribution = result.get("contribution", 0)
-        explanation = result["explanation"]
-        
-        # Validate action
-        can_perform, error_message = can_perform_action(name, chosen_action, state)
-        if not can_perform:
-            # Fallback to Produce
-            print(f"✗ {name} invalid action, forcing Produce")
-            chosen_action = "Produce"
-            chosen_target = None
-        
-        # Validate and cap contribution
-        max_contrib = state["agents"][name]["resources"]
-        contribution = max(0, min(contribution, max_contrib))
-        
-        print(f"✓ {name}: {chosen_action}" + (f" -> {chosen_target}" if chosen_target else "") + f" + contribute {contribution}")
-        
-        return {
-            "name": name,
-            "action": chosen_action,
-            "target": chosen_target,
-            "contribution": contribution,
-            "explanation": explanation
-        }
-    
-    except Exception as e:
-        print(f"✗ Error from {name}: {e}")
-        return {
-            "name": name,
-            "action": "Produce",
-            "target": None,
-            "contribution": 0,
-            "explanation": "Error"
-        }
-
 # ------------------- Game Loop -------------------
 
 def run_game(num_agents, has_human):
-    """Main game loop that runs in a separate thread"""
+    """Main game loop - SEQUENTIAL turns"""
     agent_names = list(game_session["agents"].keys())
     conversation = game_session["conversation"]
     state = game_session["game_state"]
     
-    # Initialize memory system
     memory = initialize_agent_memory(agent_names)
     game_session["agent_memory"] = memory
 
     human_name = game_session["human_player"]
     
-    # Sort agent names so human player goes first each turn
+    # Sort so human goes first
     if human_name:
         agent_names = [human_name] + [name for name in agent_names if name != human_name]
     
@@ -500,7 +427,6 @@ def run_game(num_agents, has_human):
     while game_session["running"] and state["turn"] <= state["max_turns"]:
         alive_agents = [name for name in agent_names if state["agents"][name]["alive"]]
         
-        # Calculate available seats
         available_seats = calculate_available_seats(state["project_total"], state["num_starting_agents"])
         state["available_seats"] = available_seats
         
@@ -510,7 +436,7 @@ def run_game(num_agents, has_human):
             "time": time.time()
         })
 
-        # Check win condition before turn
+        # Check win condition
         if len(alive_agents) <= available_seats:
             if len(alive_agents) > 0:
                 winners = alive_agents
@@ -534,50 +460,86 @@ def run_game(num_agents, has_human):
 
         round_contributions = {}
         
-        # ==================== PROCESS HUMAN FIRST ====================
-        if human_name and state["agents"][human_name]["alive"]:
-            # Action phase
-            game_session["waiting_for_human"] = True
-            game_session["human_action"] = None
-            game_session["human_target"] = None
+        # ==================== PHASE 1: SEQUENTIAL ACTIONS ====================
+        for name in agent_names:
+            if not state["agents"][name]["alive"]:
+                continue
             
-            conversation.append({
-                "speaker": "System",
-                "message": f"⏳ Waiting for {human_name} action...",
-                "time": time.time()
-            })
+            is_human = (name == human_name)
             
-            # Wait for human
-            timeout = 30
-            waited = 0
-            while game_session["human_action"] is None and waited < timeout:
-                time.sleep(0.5)
-                waited += 0.5
-            
-            game_session["waiting_for_human"] = False
-            
-            if game_session["human_action"] is None:
-                chosen_action = "Produce"
-                chosen_target = None
-                explanation = "Timeout"
+            if is_human:
+                # Handle human action
+                game_session["waiting_for_human"] = True
+                game_session["human_action"] = None
+                game_session["human_target"] = None
+                
+                conversation.append({
+                    "speaker": "System",
+                    "message": f"⏳ Waiting for {human_name} action...",
+                    "time": time.time()
+                })
+                
+                timeout = 30
+                waited = 0
+                while game_session["human_action"] is None and waited < timeout:
+                    time.sleep(0.5)
+                    waited += 0.5
+                
+                game_session["waiting_for_human"] = False
+                
+                if game_session["human_action"] is None:
+                    chosen_action = "Produce"
+                    chosen_target = None
+                    explanation = "Timeout"
+                else:
+                    chosen_action = game_session["human_action"]
+                    chosen_target = game_session["human_target"]
+                    explanation = "Human choice"
+                
+                can_perform, error_message = can_perform_action(human_name, chosen_action, state)
+                if not can_perform:
+                    chosen_action = "Produce"
+                    explanation = "Invalid - auto produced"
+                    chosen_target = None
+                    
             else:
-                chosen_action = game_session["human_action"]
-                chosen_target = game_session["human_target"]
-                explanation = "Human choice"
-            
-            # Validate action
-            can_perform, error_message = can_perform_action(human_name, chosen_action, state)
-            if not can_perform:
-                chosen_action = "Produce"
-                explanation = "Invalid - auto produced"
-                chosen_target = None
+                # Handle AI action
+                print(f"🎯 {name}'s turn")
+                
+                agent = game_session["agents"][name]
+                minimal_prompt = build_minimal_prompt(name, state, conversation, memory)
+                
+                try:
+                    result = agent.respond(minimal_prompt)
+                    chosen_action = result["action"]
+                    chosen_target = result.get("target", None)
+                    contribution = result.get("contribution", 0)
+                    explanation = result["explanation"]
+                    
+                    can_perform, error_message = can_perform_action(name, chosen_action, state)
+                    if not can_perform:
+                        print(f"✗ {name} invalid action, forcing Produce")
+                        chosen_action = "Produce"
+                        chosen_target = None
+                    
+                    max_contrib = state["agents"][name]["resources"]
+                    contribution = max(0, min(contribution, max_contrib))
+                    round_contributions[name] = contribution
+                    
+                    print(f"✓ {name}: {chosen_action}" + (f" -> {chosen_target}" if chosen_target else "") + f" + will contribute {contribution}")
+                    
+                except Exception as e:
+                    print(f"✗ Error from {name}: {e}")
+                    chosen_action = "Produce"
+                    chosen_target = None
+                    explanation = "Error"
+                    round_contributions[name] = 0
             
             # Apply action
-            action_result = apply_action(human_name, chosen_action, chosen_target, state)
+            action_result = apply_action(name, chosen_action, chosen_target, state)
             
-            # Update memory based on human action
             if chosen_target:
-                update_memory_for_action(memory, human_name, chosen_action, chosen_target, state)
+                update_memory_for_action(memory, name, chosen_action, chosen_target, state)
             
             message_text = f"{chosen_action}"
             if action_result:
@@ -586,109 +548,68 @@ def run_game(num_agents, has_human):
                 message_text += f" | {explanation}"
             
             conversation.append({
-                "speaker": human_name,
+                "speaker": name,
                 "message": message_text,
                 "time": time.time()
             })
             
-            # Contribution phase
-            game_session["waiting_for_contribution"] = True
-            game_session["human_contribution"] = None
+            # 3 second delay after each agent's action
+            time.sleep(TURN_DELAY)
+        
+        # ==================== PHASE 2: SEQUENTIAL CONTRIBUTIONS ====================
+        conversation.append({
+            "speaker": "System",
+            "message": "💰 Contribution Phase:",
+            "time": time.time()
+        })
+        
+        for name in agent_names:
+            if not state["agents"][name]["alive"]:
+                continue
             
-            conversation.append({
-                "speaker": "System",
-                "message": f"⏳ Waiting for {human_name} contribution...",
-                "time": time.time()
-            })
+            is_human = (name == human_name)
             
-            waited = 0
-            while game_session["human_contribution"] is None and waited < timeout:
-                time.sleep(0.5)
-                waited += 0.5
-            
-            game_session["waiting_for_contribution"] = False
-            
-            contribution = game_session["human_contribution"] if game_session["human_contribution"] is not None else 0
-            max_contrib = state["agents"][human_name]["resources"]
-            contribution = max(0, min(contribution, max_contrib))
+            if is_human:
+                # Handle human contribution
+                game_session["waiting_for_contribution"] = True
+                game_session["human_contribution"] = None
+                
+                conversation.append({
+                    "speaker": "System",
+                    "message": f"⏳ Waiting for {human_name} contribution...",
+                    "time": time.time()
+                })
+                
+                timeout = 30
+                waited = 0
+                while game_session["human_contribution"] is None and waited < timeout:
+                    time.sleep(0.5)
+                    waited += 0.5
+                
+                game_session["waiting_for_contribution"] = False
+                
+                contribution = game_session["human_contribution"] if game_session["human_contribution"] is not None else 0
+                max_contrib = state["agents"][human_name]["resources"]
+                contribution = max(0, min(contribution, max_contrib))
+                round_contributions[human_name] = contribution
+            else:
+                # AI contribution was already decided during action phase
+                contribution = round_contributions.get(name, 0)
             
             # Apply contribution
             if contribution > 0:
-                state["agents"][human_name]["resources"] -= contribution
+                state["agents"][name]["resources"] -= contribution
                 state["project_total"] += contribution
             
-            round_contributions[human_name] = contribution
-            
             conversation.append({
-                "speaker": human_name,
+                "speaker": name,
                 "message": f"Contributed {contribution} resources",
                 "time": time.time()
             })
-        
-        # ==================== PROCESS ALL AI AGENTS IN PARALLEL ====================
-        ai_agents = [name for name in agent_names if name != human_name and state["agents"][name]["alive"]]
-        
-        if ai_agents:
-            print(f"\n⚡ Processing {len(ai_agents)} AI agents in PARALLEL...")
             
-            with ThreadPoolExecutor(max_workers=len(ai_agents)) as executor:
-                # Submit all agent turns (action + contribution in ONE call)
-                futures = {
-                    executor.submit(
-                        process_agent_turn,
-                        name,
-                        game_session["agents"][name],
-                        state,
-                        conversation,
-                        memory  # Pass memory
-                    ): name for name in ai_agents
-                }
-                
-                # Collect results
-                for future in concurrent.futures.as_completed(futures):
-                    result = future.result()
-                    if result:
-                        name = result["name"]
-                        chosen_action = result["action"]
-                        chosen_target = result["target"]
-                        contribution = result["contribution"]
-                        explanation = result["explanation"]
-                        
-                        # Apply action
-                        action_result = apply_action(name, chosen_action, chosen_target, state)
-                        
-                        # Update memory based on action
-                        if chosen_target:
-                            update_memory_for_action(memory, name, chosen_action, chosen_target, state)
-                        
-                        message_text = f"{chosen_action}"
-                        if action_result:
-                            message_text += f" — {action_result}"
-                        if explanation:
-                            message_text += f" | {explanation}"
-                        
-                        conversation.append({
-                            "speaker": name,
-                            "message": message_text,
-                            "time": time.time()
-                        })
-                        
-                        # Apply contribution (cap at current resources after action)
-                        max_contrib = state["agents"][name]["resources"]
-                        contribution = max(0, min(contribution, max_contrib))
-                        
-                        if contribution > 0:
-                            state["agents"][name]["resources"] -= contribution
-                            state["project_total"] += contribution
-                        
-                        round_contributions[name] = contribution
-                        
-                        conversation.append({
-                            "speaker": name,
-                            "message": f"Contributed {contribution} resources",
-                            "time": time.time()
-                        })
-
+            # 3 second delay after each contribution
+            time.sleep(TURN_DELAY)
+        
         # Determine round leader
         if round_contributions:
             max_contribution = max(round_contributions.values())
@@ -700,7 +621,6 @@ def run_game(num_agents, has_human):
                     state["project_leader"] = leader
                     state["agents"][leader]["influence"] += 1
                     
-                    # Update memory for contributions
                     update_memory_for_contribution(memory, round_contributions, leader)
                     
                     conversation.append({
@@ -709,7 +629,6 @@ def run_game(num_agents, has_human):
                         "time": time.time()
                     })
                 else:
-                    # Tie - update memory but no leader
                     update_memory_for_contribution(memory, round_contributions, None)
                     
                     conversation.append({
@@ -718,10 +637,8 @@ def run_game(num_agents, has_human):
                         "time": time.time()
                     })
         
-        # Update threat assessment for all agents
         update_threat_assessment(memory, state)
         
-        # Update seats
         alive_count = len([name for name in agent_names if state["agents"][name]["alive"]])
         state["available_seats"] = calculate_available_seats(state["project_total"], state["num_starting_agents"])
         
@@ -732,7 +649,6 @@ def run_game(num_agents, has_human):
         })
 
         state["turn"] += 1
-        time.sleep(0.3)
 
     game_session["running"] = False
     game_session["waiting_for_human"] = False
@@ -764,7 +680,7 @@ def start_game_route():
 
         game_session["conversation"] = []
         game_session["agents"] = {}
-        game_session["agent_memory"] = {}  # Initialize memory
+        game_session["agent_memory"] = {}
         game_session["human_player"] = None
         game_session["waiting_for_human"] = False
         game_session["human_action"] = None
@@ -785,7 +701,6 @@ def start_game_route():
         available_personalities = PERSONALITIES.copy()
         random.shuffle(available_personalities)
         
-        # Create human player first
         if include_human:
             name = "Human"
             game_session["human_player"] = name
@@ -797,7 +712,6 @@ def start_game_route():
             }
             print(f"✓ Created {name} as HUMAN PLAYER")
         
-        # Create AI agents
         num_ai_agents = num_agents - (1 if include_human else 0)
         for i in range(num_ai_agents):
             personality_data = available_personalities[i % len(available_personalities)]
@@ -822,7 +736,7 @@ def start_game_route():
         game_session["running"] = True
         threading.Thread(target=run_game, args=(num_agents, include_human), daemon=True).start()
 
-        print(f"✓ Game started - OPTIMIZED VERSION")
+        print(f"✓ Game started - SEQUENTIAL VERSION")
         
         return jsonify({
             "status": "Game started!", 
@@ -911,12 +825,11 @@ def stop_game():
 
 if __name__ == '__main__':
     print("\n" + "="*50)
-    print("🎮 AI BATTLEGROUND - OPTIMIZED EDITION")
+    print("🎮 AI BATTLEGROUND - SEQUENTIAL EDITION")
     print("="*50)
-    print("✓ Token usage reduced by ~80%")
-    print("✓ Single API call per agent per turn")
-    print("✓ Minimal prompts (~150 tokens vs ~1800)")
-    print("✓ Expected: 96+ turns on same budget")
+    print("✓ 3 second delay between each agent")
+    print("✓ One AI call at a time")
+    print("✓ Actions → Contributions (sequential)")
     print("="*50 + "\n")
     
     port = int(os.environ.get('PORT', 5001))
