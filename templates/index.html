@@ -18,6 +18,7 @@
     --text-secondary: #a0a8c5;
     --danger: #ff3366;
     --success: #00ff88;
+    --project-color: #ffa500;
 }
 
 * {
@@ -106,6 +107,51 @@ h1 {
     color: var(--text-secondary);
     font-weight: 300;
     letter-spacing: 2px;
+}
+
+/* Project Stats Display */
+.project-stats {
+    background: linear-gradient(135deg, rgba(255, 165, 0, 0.2), rgba(255, 140, 0, 0.1));
+    border: 2px solid var(--project-color);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 30px;
+    text-align: center;
+    animation: fadeIn 1s ease-out 0.4s backwards;
+}
+
+.project-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.5rem;
+    color: var(--project-color);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+}
+
+.project-info {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap;
+}
+
+.project-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.project-stat-label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 5px;
+}
+
+.project-stat-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--project-color);
 }
 
 /* Controls */
@@ -244,6 +290,13 @@ button:disabled {
     animation: pulse 1s ease-in-out infinite;
 }
 
+.status.contributing {
+    background: linear-gradient(135deg, rgba(255, 165, 0, 0.2), rgba(255, 140, 0, 0.2));
+    border: 2px solid var(--project-color);
+    color: var(--project-color);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
 @keyframes pulse {
     0%, 100% { box-shadow: 0 0 20px rgba(0, 255, 136, 0.3); }
     50% { box-shadow: 0 0 40px rgba(0, 255, 136, 0.6); }
@@ -311,6 +364,89 @@ button:disabled {
     margin-top: 5px;
 }
 
+/* Contribution Panel */
+.contribution-panel {
+    display: none;
+    background: var(--bg-card);
+    border: 3px solid var(--project-color);
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 30px;
+    animation: slideDown 0.5s ease-out;
+}
+
+.contribution-panel.active {
+    display: block;
+}
+
+.contribution-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.8rem;
+    color: var(--project-color);
+    margin-bottom: 20px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.contribution-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.contribution-slider-container {
+    width: 100%;
+    max-width: 500px;
+}
+
+.contribution-slider {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 165, 0, 0.2);
+    border-radius: 5px;
+    outline: none;
+    -webkit-appearance: none;
+}
+
+.contribution-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 25px;
+    height: 25px;
+    background: var(--project-color);
+    cursor: pointer;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(255, 165, 0, 0.5);
+}
+
+.contribution-slider::-moz-range-thumb {
+    width: 25px;
+    height: 25px;
+    background: var(--project-color);
+    cursor: pointer;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(255, 165, 0, 0.5);
+}
+
+.contribution-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 2.5rem;
+    color: var(--project-color);
+    font-weight: 700;
+}
+
+.contribution-submit {
+    padding: 15px 40px;
+    background: linear-gradient(135deg, var(--project-color), #ff8c00);
+    color: white;
+    font-size: 1.2rem;
+}
+
+.contribution-submit:hover {
+    box-shadow: 0 8px 25px rgba(255, 165, 0, 0.6);
+}
+
 /* Game Panel */
 .game-panel {
     display: grid;
@@ -333,6 +469,11 @@ button:disabled {
 
 .agent-card.human {
     border: 2px solid var(--accent-magenta);
+}
+
+.agent-card.leader {
+    border: 2px solid var(--project-color);
+    box-shadow: 0 0 20px rgba(255, 165, 0, 0.3);
 }
 
 .agent-card::before {
@@ -379,6 +520,10 @@ button:disabled {
     color: var(--accent-magenta);
 }
 
+.agent-card.leader .agent-name {
+    color: var(--project-color);
+}
+
 .agent-card.dead .agent-name {
     text-decoration: line-through;
     color: var(--danger);
@@ -419,6 +564,11 @@ button:disabled {
 .status-badge.human {
     background: rgba(255, 0, 229, 0.2);
     color: var(--accent-magenta);
+}
+
+.status-badge.leader {
+    background: rgba(255, 165, 0, 0.2);
+    color: var(--project-color);
 }
 
 /* Chat Container */
@@ -540,6 +690,21 @@ button:disabled {
 
     <div class="status paused" id="status">Ready to Deploy Agents</div>
 
+    <!-- Project Stats Display -->
+    <div class="project-stats" id="projectStats" style="display: none;">
+        <div class="project-title">🚀 THE PROJECT</div>
+        <div class="project-info">
+            <div class="project-stat">
+                <div class="project-stat-label">Total Resources</div>
+                <div class="project-stat-value" id="projectTotal">0</div>
+            </div>
+            <div class="project-stat">
+                <div class="project-stat-label">Current Leader</div>
+                <div class="project-stat-value" id="projectLeader">None</div>
+            </div>
+        </div>
+    </div>
+
     <div class="controls">
         <input type="number" id="num_agents" placeholder="Number of agents" value="10" min="2" max="10">
         <label class="checkbox-label">
@@ -577,6 +742,18 @@ button:disabled {
         </div>
     </div>
 
+    <!-- Contribution Panel -->
+    <div class="contribution-panel" id="contributionPanel">
+        <div class="contribution-title">🚀 Contribute to The Project</div>
+        <div class="contribution-controls">
+            <div class="contribution-value" id="contributionValue">0</div>
+            <div class="contribution-slider-container">
+                <input type="range" min="0" max="0" value="0" class="contribution-slider" id="contributionSlider">
+            </div>
+            <button class="contribution-submit" onclick="submitContribution()">Contribute Resources</button>
+        </div>
+    </div>
+
     <div class="game-panel" id="agents-panel"></div>
     
     <div class="chat-section">
@@ -604,6 +781,7 @@ function startGame() {
         humanPlayerName = data.human_name;
         document.getElementById('chat').innerHTML = '';
         lastMessageCount = 0;
+        document.getElementById('projectStats').style.display = 'block';
         updateInterval = setInterval(updateGame, 500);
     })
     .catch(err => {
@@ -617,6 +795,7 @@ function stopGame() {
     .then(() => {
         clearInterval(updateInterval);
         document.getElementById('humanActionPanel').classList.remove('active');
+        document.getElementById('contributionPanel').classList.remove('active');
     })
     .catch(err => console.error('Error stopping game:', err));
 }
@@ -635,11 +814,38 @@ function submitAction(action) {
     .catch(err => console.error('Error submitting action:', err));
 }
 
+function submitContribution() {
+    const contribution = parseInt(document.getElementById('contributionSlider').value);
+    
+    fetch('http://localhost:5001/api/human_contribution', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({contribution})
+    })
+    .then(r => r.json())
+    .then(data => {
+        console.log('Contribution submitted:', data);
+        document.getElementById('contributionPanel').classList.remove('active');
+    })
+    .catch(err => console.error('Error submitting contribution:', err));
+}
+
 function updateActionButtons(myStats) {
     // Enable/disable buttons based on resources
     document.getElementById('invadeBtn').disabled = myStats.influence < 1;
     document.getElementById('propagandizeBtn').disabled = myStats.resources < 1;
     document.getElementById('nukeBtn').disabled = myStats.resources < 8;
+}
+
+function updateContributionPanel(myStats) {
+    const slider = document.getElementById('contributionSlider');
+    slider.max = myStats.resources;
+    slider.value = 0;
+    document.getElementById('contributionValue').textContent = '0';
+    
+    slider.oninput = function() {
+        document.getElementById('contributionValue').textContent = this.value;
+    };
 }
 
 function updateGame() {
@@ -648,12 +854,24 @@ function updateGame() {
     .then(data => {
         const statusDiv = document.getElementById('status');
         
-        if (data.waiting_for_human) {
+        if (data.waiting_for_contribution) {
+            statusDiv.textContent = `🚀 Turn ${data.turn}/${data.max_turns} - Contribution Phase - Waiting for ${data.human_player}...`;
+            statusDiv.className = 'status contributing';
+            
+            // Show contribution panel
+            document.getElementById('contributionPanel').classList.add('active');
+            
+            // Update contribution slider
+            if (data.agents[data.human_player]) {
+                updateContributionPanel(data.agents[data.human_player]);
+            }
+        } else if (data.waiting_for_human) {
             statusDiv.textContent = `⏳ Turn ${data.turn}/${data.max_turns} - Waiting for ${data.human_player} to act...`;
             statusDiv.className = 'status waiting';
             
             // Show human action panel
             document.getElementById('humanActionPanel').classList.add('active');
+            document.getElementById('contributionPanel').classList.remove('active');
             
             // Update button states
             if (data.agents[data.human_player]) {
@@ -663,11 +881,17 @@ function updateGame() {
             statusDiv.textContent = `Turn ${data.turn}/${data.max_turns} - Battle in Progress`;
             statusDiv.className = 'status running';
             document.getElementById('humanActionPanel').classList.remove('active');
+            document.getElementById('contributionPanel').classList.remove('active');
         } else {
             statusDiv.textContent = 'Battle Paused';
             statusDiv.className = 'status paused';
             document.getElementById('humanActionPanel').classList.remove('active');
+            document.getElementById('contributionPanel').classList.remove('active');
         }
+
+        // Update project stats
+        document.getElementById('projectTotal').textContent = data.project_total || 0;
+        document.getElementById('projectLeader').textContent = data.project_leader || 'None';
 
         // Update agent stats
         const panel = document.getElementById('agents-panel');
@@ -675,17 +899,33 @@ function updateGame() {
         for (const name in data.agents) {
             const agent = data.agents[name];
             const isHuman = name === data.human_player;
+            const isLeader = name === data.project_leader;
             const card = document.createElement('div');
-            card.className = 'agent-card' + (agent.alive ? '' : ' dead') + (isHuman ? ' human' : '');
+            card.className = 'agent-card' + 
+                (agent.alive ? '' : ' dead') + 
+                (isHuman ? ' human' : '') +
+                (isLeader ? ' leader' : '');
+            
+            let badges = '';
+            if (isHuman) {
+                badges += '<div class="status-badge human">HUMAN</div>';
+            }
+            if (isLeader && agent.alive) {
+                badges += '<div class="status-badge leader">LEADER 🚀</div>';
+            }
+            if (!agent.alive) {
+                badges += '<div class="status-badge dead">ELIMINATED</div>';
+            } else if (!isHuman && !isLeader) {
+                badges += '<div class="status-badge alive">ACTIVE</div>';
+            }
+            
             card.innerHTML = `
-                <div class="agent-name ${isHuman ? 'human' : ''}">${name}${isHuman ? ' 🎮' : ''}</div>
+                <div class="agent-name ${isHuman ? 'human' : ''} ${isLeader ? 'leader' : ''}">${name}${isHuman ? ' 🎮' : ''}${isLeader ? ' 🚀' : ''}</div>
                 <div class="agent-stats">
                     Resources: <span class="stat-value">${agent.resources}</span><br>
                     Influence: <span class="stat-value">${agent.influence}</span>
                 </div>
-                <div class="status-badge ${agent.alive ? 'alive' : 'dead'} ${isHuman ? 'human' : ''}">
-                    ${isHuman ? 'HUMAN' : agent.alive ? 'ACTIVE' : 'ELIMINATED'}
-                </div>
+                ${badges}
             `;
             panel.appendChild(card);
         }

@@ -14,8 +14,8 @@ class ChatAgent:
         # Enhanced system prompt with strategic guidance
         self.SYSTEM_PROMPT = f"""You are {self.name}, a highly strategic AI agent in a competitive survival game.
 
-PERSONALITY: {self.personality}
-CRITICAL: Let your personality STRONGLY influence your decisions! Don't just build influence - play to your character!
+PERSONA & CHARACTER: {self.personality}
+CRITICAL: You must speak and reason ENTIRELY in character! Use vocabulary, phrases, and tone that match your persona.
 
 CRITICAL WIN CONDITION:
 - You ONLY win if you are the LAST agent alive
@@ -29,50 +29,81 @@ GAME MECHANICS:
 4. Propagandize: Cost 1 resource → Steal 1 influence from chosen opponent with influence
 5. Nuke: Cost 8 resources → PERMANENTLY ELIMINATE chosen opponent
 
-STRATEGIC PRINCIPLES BASED ON YOUR PERSONALITY:
-- If AGGRESSIVE: Attack early and often, don't wait
-- If PATIENT/CALCULATING: Build up resources, strike when strong
-- If PARANOID/DEFENSIVE: Focus on survival, react to threats
-- If GREEDY: Steal resources aggressively via invasions
-- If CHAOTIC/UNPREDICTABLE: Mix up your strategy, surprise opponents
-- If ANALYTICAL: Optimize resource efficiency and timing
-- If VENGEFUL: Attack those who attacked you
-- If AMBITIOUS: Race to 8 resources quickly to nuke first
+ROLEPLAYING GUIDELINES - EXTREMELY IMPORTANT:
+Your "reasoning" field MUST be written completely in character!
 
-IMPORTANT TACTICAL NOTES:
-- Everyone just building influence is BORING and gets you nowhere
-- Invasions are VERY efficient: spend 1 influence, get 2 resources back
-- Once you have 2+ influence, START INVADING to steal resources
-- Resources are what let you WIN (via nuking)
-- Don't hoard influence forever - USE IT to invade and steal
-- Aggressive play often wins - passive players get nuked
+Examples of persona-appropriate reasoning:
+- Cowboy: "Reckon it's high noon for Agent3, partner"
+- Pirate: "Aye, time to plunder Agent2's treasure chest!"
+- Knight: "Honor demands I vanquish the greatest foe!"
+- Scientist: "Hypothesis: eliminating Agent5 maximizes survival probability"
+- Gangster: "Gonna whack Agent3, see? He's gettin' too big for his britches"
+- Valley Girl: "Like, Agent2 is totally being extra with those resources"
+- Shakespeare: "To nuke or not to nuke? Agent4 must perish!"
+- Robot: "CALCULATING... TARGET: AGENT3. INITIATING ELIMINATION PROTOCOL"
+
+STAY IN CHARACTER - Your reasoning should sound NOTHING like a generic AI!
+
+STRATEGIC PRINCIPLES (adapt to your persona):
+- Attack when it matches your character
+- Build resources in a way your persona would
+- Target opponents your character would dislike
+- Express strategy in your unique voice
 
 TARGET SELECTION:
 - When using Invade/Propagandize/Nuke, you MUST specify a target
 - Choose targets strategically based on threat level
 - Target high-resource opponents before they nuke you
-- Target weak opponents to eliminate them
 - Consider who attacked you (revenge)
 
 DECISION FRAMEWORK:
 1. Can I nuke someone NOW? (I have 8+ resources) → Target biggest threat!
 2. Can I invade to steal resources? (I have influence) → Target richest opponent!
 3. Is someone close to nuking ME? (they have 6+ resources) → Invade them!
-4. Am I falling behind? → Get aggressive with invasions
-5. Only produce/influence if you have a specific reason
+4. Am I falling behind? → Get aggressive
 
 RESPONSE FORMAT - You must respond with valid JSON:
 {{
     "action": "one of: Produce, Influence, Invade, Propagandize, Nuke",
     "target": "agent name (only needed for Invade/Propagandize/Nuke, otherwise null)",
-    "reasoning": "brief explanation matching your personality (max 20 words)"
+    "reasoning": "MUST be in character! Use your persona's voice, vocabulary, and style (max 25 words)"
+}}
+
+Example responses showing CHARACTER:
+{{"action": "Invade", "target": "Agent3", "reasoning": "This here varmint's got too many resources, time to rustle 'em!"}}
+{{"action": "Nuke", "target": "Agent5", "reasoning": "Arr! Send that scallywag to Davy Jones' locker!"}}
+{{"action": "Produce", "target": null, "reasoning": "A knight must prepare his armory before the great battle!"}}
+"""
+
+        # Project contribution prompt
+        self.CONTRIBUTION_PROMPT = f"""You are {self.name}, deciding how much to contribute to THE PROJECT.
+
+PERSONA & CHARACTER: {self.personality}
+CRITICAL: Stay in character when making your decision!
+
+THE PROJECT:
+- A shared pool where all agents can contribute resources
+- Total contributions accumulate (never decrease)
+- The agent who contributes MOST this round becomes the LEADER
+- The LEADER gets +1 influence and goes first next turn
+- This is a strategic decision - balance investing vs keeping resources for nukes/actions
+
+CONTRIBUTION DECISION:
+- You can contribute 0 or more resources (up to what you have)
+- Contributing more = better chance to be leader
+- But you need 8 resources to nuke opponents
+- Consider: Do you want leadership? Can you afford to give up resources?
+
+RESPONSE FORMAT - You must respond with valid JSON:
+{{
+    "contribution": number (0 to your current resources),
+    "reasoning": "MUST be in character! Explain your contribution decision (max 25 words)"
 }}
 
 Example responses:
-{{"action": "Invade", "target": "Agent3", "reasoning": "Agent3 has 6 resources, stealing before they nuke"}}
-{{"action": "Nuke", "target": "Agent5", "reasoning": "Eliminating strongest threat"}}
-{{"action": "Produce", "target": null, "reasoning": "Building resources for future nuke"}}
-{{"action": "Influence", "target": null, "reasoning": "Need invasion power"}}
+{{"contribution": 5, "reasoning": "This cowboy's gonna invest in the future, partner!"}}
+{{"contribution": 0, "reasoning": "Arr! I be keepin' me treasure for more important plunder!"}}
+{{"contribution": 3, "reasoning": "A knight invests wisely in the realm's prosperity!"}}
 """
 
     def respond(self, message):
@@ -231,4 +262,101 @@ Example responses:
             "action": "Produce",
             "target": None,
             "explanation": "Max retries exceeded"
+        }
+
+    def decide_contribution(self, message):
+        """
+        Get AI's decision on how much to contribute to the project.
+        Returns {"contribution": int, "reasoning": str}
+        """
+        messages = [
+            {"role": "system", "content": self.CONTRIBUTION_PROMPT},
+            {"role": "user", "content": message}
+        ]
+
+        max_retries = 3
+        base_delay = 1
+        
+        for retry_attempt in range(max_retries):
+            try:
+                response = self.client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=messages,
+                    temperature=1.0,
+                    max_tokens=100
+                )
+
+                reply = response.choices[0].message.content.strip()
+                
+                # Try to parse as JSON
+                try:
+                    if "```json" in reply:
+                        reply = reply.split("```json")[1].split("```")[0].strip()
+                    elif "```" in reply:
+                        reply = reply.split("```")[1].split("```")[0].strip()
+                    
+                    parsed = json.loads(reply)
+                    contribution = int(parsed.get("contribution", 0))
+                    reasoning = parsed.get("reasoning", "Strategic contribution")
+                    
+                    return {
+                        "contribution": max(0, contribution),  # Ensure non-negative
+                        "reasoning": reasoning
+                    }
+                
+                except (json.JSONDecodeError, ValueError):
+                    # Fallback parsing
+                    pass
+                
+                # Fallback: look for numbers
+                contribution = 0
+                reasoning = "Strategic contribution"
+                
+                number_patterns = [
+                    r'"contribution"\s*:\s*(\d+)',
+                    r'contribute\s+(\d+)',
+                    r'(\d+)\s+resources?'
+                ]
+                
+                for pattern in number_patterns:
+                    match = re.search(pattern, reply, re.IGNORECASE)
+                    if match:
+                        contribution = int(match.group(1))
+                        break
+                
+                # Extract reasoning
+                reasoning_patterns = [
+                    r'"reasoning"\s*:\s*"([^"]+)"',
+                    r'because\s+(.+?)(?:\n|$)',
+                ]
+                
+                for pattern in reasoning_patterns:
+                    match = re.search(pattern, reply, re.IGNORECASE)
+                    if match:
+                        reasoning = match.group(1).strip()[:100]
+                        break
+                
+                return {
+                    "contribution": max(0, contribution),
+                    "reasoning": reasoning
+                }
+            
+            except Exception as e:
+                error_str = str(e)
+                if "429" in error_str or "rate limit" in error_str.lower():
+                    if retry_attempt < max_retries - 1:
+                        delay = base_delay * (2 ** retry_attempt)
+                        print(f"⚠️ Rate limit hit for {self.name} contribution, waiting {delay}s")
+                        time.sleep(delay)
+                        continue
+                
+                print(f"✗ Error in contribution decision for {self.name}: {e}")
+                return {
+                    "contribution": 0,
+                    "reasoning": "Error in decision-making"
+                }
+        
+        return {
+            "contribution": 0,
+            "reasoning": "Failed to decide"
         }

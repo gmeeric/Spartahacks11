@@ -10,20 +10,20 @@ CORS(app)
 # Import ChatAgent - no fallback, real AI only
 from chat import ChatAgent
 
-API_KEY = "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"
+API_KEY = "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"
 
-# 10 distinct personalities for AI agents
+# 10 distinct character personas for AI agents
 PERSONALITIES = [
-    "aggressive and decisive, strikes first",
-    "calculating and patient, waits for perfect moment",
-    "paranoid and defensive, fears being nuked",
-    "greedy and opportunistic, steals resources aggressively",
-    "diplomatic but ruthless, builds then strikes",
-    "chaotic and unpredictable, takes big risks",
-    "analytical and methodical, optimizes every move",
-    "vengeful and reactive, retaliates against attackers",
-    "ambitious and competitive, always pushes for dominance",
-    "cunning and deceptive, hides true intentions"
+    "1800s Wild West Cowboy - speaks with 'partner', 'reckon', 'varmint', uses frontier slang",
+    "Pirate Captain - says 'arr', 'matey', 'scallywag', talks about treasure and the seven seas",
+    "Medieval Knight - formal, honorable, talks about chivalry and valor, says 'thy' and 'thou'",
+    "Mad Scientist - analytical, uses science terms, talks about hypotheses and experiments",
+    "1920s Gangster - talks like a mobster, says 'see?', 'wise guy', 'gonna whack'",
+    "Valley Girl - says 'like', 'totally', 'literally', very casual and modern",
+    "Shakespearean Actor - flowery dramatic language, speaks in old English poetic style",
+    "Military General - commands, strategies, talks about tactics and deployment",
+    "Robot/AI - cold logic, says 'CALCULATING', 'PROTOCOL', speaks in ALL CAPS sometimes",
+    "Surfer Dude - laid back, says 'dude', 'gnarly', 'radical', very chill"
 ]
 
 game_session = {
@@ -33,7 +33,9 @@ game_session = {
     "running": False,
     "human_player": None,  # Name of human player (if any)
     "waiting_for_human": False,  # Is game paused for human input?
-    "human_action": None   # Action chosen by human
+    "human_action": None,   # Action chosen by human
+    "waiting_for_contribution": False,  # Is game paused for contribution input?
+    "human_contribution": None  # Contribution amount chosen by human
 }
 
 # ------------------- Helper Functions -------------------
@@ -274,6 +276,39 @@ def build_strategic_prompt(name, state, conversation, last_seen_index, include_e
     
     return prompt
 
+def build_contribution_prompt(name, state, round_contributions):
+    """Build prompt for project contribution decision"""
+    agents_state = state["agents"]
+    my_stats = agents_state[name]
+    
+    prompt = f"=== PROJECT CONTRIBUTION DECISION ===\n\n"
+    prompt += f"YOUR CURRENT STATUS ({name}):\n"
+    prompt += f"  Resources: {my_stats['resources']}\n"
+    prompt += f"  Influence: {my_stats['influence']}\n\n"
+    
+    prompt += f"THE PROJECT:\n"
+    prompt += f"  Total Contributions So Far: {state['project_total']} resources\n"
+    prompt += f"  Current Round Leader: {state.get('project_leader', 'None')}\n\n"
+    
+    if round_contributions:
+        prompt += "CONTRIBUTIONS THIS ROUND SO FAR:\n"
+        sorted_contribs = sorted(round_contributions.items(), key=lambda x: x[1], reverse=True)
+        for agent_name, amount in sorted_contribs:
+            prompt += f"  {agent_name}: {amount} resources\n"
+        highest_contrib = sorted_contribs[0][1] if sorted_contribs else 0
+        prompt += f"\nTo become leader, you need to contribute MORE than {highest_contrib} resources.\n"
+    else:
+        prompt += "You are the first to contribute this round!\n"
+    
+    prompt += f"\nREMINDER:\n"
+    prompt += f"- Contributing the MOST this round gives you +1 influence and first action next turn\n"
+    prompt += f"- You need 8 resources to nuke someone\n"
+    prompt += f"- Consider your strategy: invest in leadership or save for attacks?\n"
+    
+    prompt += f"\nHow many resources do you want to contribute? (0 to {my_stats['resources']})\n"
+    
+    return prompt
+
 # ------------------- Game Loop -------------------
 
 def run_game(num_agents, has_human):
@@ -327,6 +362,7 @@ def run_game(num_agents, has_human):
             "time": time.time()
         })
 
+        # ACTION PHASE
         for name in agent_names:
             if not state["agents"][name]["alive"]:
                 continue
@@ -468,17 +504,135 @@ def run_game(num_agents, has_human):
             last_seen_index[name] = len(conversation)
 
             # Delay between agents to avoid rate limits
-            # - 0.5s between AI agents (reduces simultaneous API calls)
-            # - 1.5s after last agent before next turn (UI readability)
             if name != agent_names[-1] or not state["agents"][agent_names[-1]]["alive"]:
-                time.sleep(0.5)  # Brief pause between agents
+                time.sleep(3)  # 3 second pause between agents
             else:
-                time.sleep(1.5)  # Longer pause before next turn
+                time.sleep(3)  # 3 second pause before contribution phase
+
+        # PROJECT CONTRIBUTION PHASE
+        conversation.append({
+            "speaker": "System",
+            "message": f"🚀 PROJECT CONTRIBUTION PHASE - Turn {state['turn']}",
+            "time": time.time()
+        })
+        
+        round_contributions = {}
+        
+        for name in agent_names:
+            if not state["agents"][name]["alive"]:
+                continue
+            
+            # Human player contribution
+            if name == human_name:
+                game_session["waiting_for_contribution"] = True
+                game_session["human_contribution"] = None
+                
+                conversation.append({
+                    "speaker": "System",
+                    "message": f"⏳ Waiting for {human_name} to decide contribution...",
+                    "time": time.time()
+                })
+                
+                timeout = 60
+                waited = 0
+                while game_session["human_contribution"] is None and waited < timeout:
+                    time.sleep(0.5)
+                    waited += 0.5
+                
+                game_session["waiting_for_contribution"] = False
+                
+                if game_session["human_contribution"] is None:
+                    contribution = 0
+                    reasoning = "Timeout - no contribution"
+                else:
+                    contribution = game_session["human_contribution"]
+                    reasoning = "Human decision"
+                
+                # Validate contribution
+                max_contrib = state["agents"][name]["resources"]
+                contribution = max(0, min(contribution, max_contrib))
+                
+            else:
+                # AI agent contribution
+                agent = game_session["agents"][name]
+                
+                try:
+                    contrib_prompt = build_contribution_prompt(name, state, round_contributions)
+                    print(f"\n{'='*60}")
+                    print(f"Getting contribution from {name}")
+                    print(f"{'='*60}")
+                    
+                    result = agent.decide_contribution(contrib_prompt)
+                    contribution = result["contribution"]
+                    reasoning = result["reasoning"]
+                    
+                    # Validate contribution
+                    max_contrib = state["agents"][name]["resources"]
+                    contribution = max(0, min(contribution, max_contrib))
+                    
+                    print(f"AI Contribution: {contribution} resources - {reasoning}")
+                    
+                except Exception as e:
+                    print(f"✗ Error getting contribution from {name}: {e}")
+                    contribution = 0
+                    reasoning = "Error in decision"
+            
+            # Apply contribution
+            if contribution > 0:
+                state["agents"][name]["resources"] -= contribution
+                state["project_total"] += contribution
+            
+            round_contributions[name] = contribution
+            
+            # Add to conversation
+            message_text = f"Contributed {contribution} resources to the project"
+            if reasoning:
+                message_text += f" | {reasoning}"
+            
+            conversation.append({
+                "speaker": name,
+                "message": message_text,
+                "time": time.time()
+            })
+            
+            time.sleep(2)  # 2 second pause between contribution decisions
+        
+        # Determine round leader (highest contributor)
+        if round_contributions:
+            max_contribution = max(round_contributions.values())
+            if max_contribution > 0:
+                leaders = [name for name, contrib in round_contributions.items() if contrib == max_contribution]
+                
+                if len(leaders) == 1:
+                    leader = leaders[0]
+                    state["project_leader"] = leader
+                    state["agents"][leader]["influence"] += 1
+                    
+                    conversation.append({
+                        "speaker": "System",
+                        "message": f"🏆 {leader} contributed the most ({max_contribution} resources) and becomes the PROJECT LEADER! (+1 influence)",
+                        "time": time.time()
+                    })
+                else:
+                    # Tie - no leader this round
+                    conversation.append({
+                        "speaker": "System",
+                        "message": f"🤝 TIE! Multiple agents contributed {max_contribution} resources - no leader this round",
+                        "time": time.time()
+                    })
+        
+        conversation.append({
+            "speaker": "System",
+            "message": f"📊 Project Total: {state['project_total']} resources",
+            "time": time.time()
+        })
 
         state["turn"] += 1
+        time.sleep(2)  # Pause before next turn
 
     game_session["running"] = False
     game_session["waiting_for_human"] = False
+    game_session["waiting_for_contribution"] = False
     conversation.append({
         "speaker": "System",
         "message": "=== BATTLE CONCLUDED ===",
@@ -513,10 +667,14 @@ def start_game_route():
         game_session["human_player"] = None
         game_session["waiting_for_human"] = False
         game_session["human_action"] = None
+        game_session["waiting_for_contribution"] = False
+        game_session["human_contribution"] = None
         game_session["game_state"] = {
             "turn": 1,
             "max_turns": 30,
-            "agents": {}
+            "agents": {},
+            "project_total": 0,
+            "project_leader": None
         }
 
         # Create agents
@@ -587,7 +745,10 @@ def get_game_state():
         "max_turns": state.get("max_turns", 30),
         "running": game_session.get("running", False),
         "waiting_for_human": game_session.get("waiting_for_human", False),
-        "human_player": game_session.get("human_player", None)
+        "waiting_for_contribution": game_session.get("waiting_for_contribution", False),
+        "human_player": game_session.get("human_player", None),
+        "project_total": state.get("project_total", 0),
+        "project_leader": state.get("project_leader", None)
     })
 
 @app.route('/api/human_action', methods=['POST'])
@@ -612,6 +773,28 @@ def submit_human_action():
         print(f"✗ Error submitting human action: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/human_contribution', methods=['POST'])
+def submit_human_contribution():
+    """Submit human player's project contribution"""
+    try:
+        data = request.json
+        contribution = int(data.get("contribution", 0))
+        
+        if contribution < 0:
+            return jsonify({"error": "Contribution must be non-negative"}), 400
+        
+        if not game_session.get("waiting_for_contribution", False):
+            return jsonify({"error": "Not waiting for contribution input"}), 400
+        
+        game_session["human_contribution"] = contribution
+        print(f"✓ Human contributed: {contribution} resources")
+        
+        return jsonify({"status": "Contribution submitted", "contribution": contribution})
+    
+    except Exception as e:
+        print(f"✗ Error submitting human contribution: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/stop', methods=['POST'])
 def stop_game():
     """Stop the current game"""
@@ -623,6 +806,7 @@ if __name__ == '__main__':
     print("🎮 AI BATTLEGROUND SERVER")
     print("="*50)
     print("✓ Using Real Groq AI")
+    print("✓ Project/Rocket System Enabled")
     print("="*50 + "\n")
     
     app.run(debug=True, port=5001, threaded=True)
