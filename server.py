@@ -367,8 +367,13 @@ def build_minimal_prompt(name, state, conversation, memory):
     agents_state = state["agents"]
     alive_count = len([n for n, s in agents_state.items() if s["alive"]])
     available_seats = state.get("available_seats", 0)
+    turns_remaining = state.get("max_turns", 15) - state.get("turn", 1) + 1
     
-    prompt = f"Turn {state['turn']}: {alive_count} alive, {available_seats} seats, {state['project_total']} PROJECT\n\n"
+    prompt = f"Turn {state['turn']}/{state.get('max_turns', 15)} ({turns_remaining} left): {alive_count} alive, {available_seats} seats, {state['project_total']} PROJECT\n\n"
+    
+    # Add urgency warning
+    if turns_remaining <= 3:
+        prompt += f"⚠️ ONLY {turns_remaining} TURNS LEFT! If time runs out, only agents with HIGHEST INFLUENCE board the rocket!\n\n"
     
     memory_context = build_memory_context(name, memory, state)
     if memory_context:
@@ -432,7 +437,7 @@ def run_game(num_agents, has_human):
         
         conversation.append({
             "speaker": "System",
-            "message": f"--- Turn {state['turn']} ---",
+            "message": f"--- Turn {state['turn']}/{state['max_turns']} ---",
             "time": time.time()
         })
 
@@ -662,6 +667,54 @@ def run_game(num_agents, has_human):
 
         state["turn"] += 1
 
+# Handle time limit ending - influence-based selection
+    if game_session["running"] and state["turn"] > state["max_turns"]:
+        alive_agents = [name for name in agent_names if state["agents"][name]["alive"]]
+        available_seats = state.get("available_seats", 0)
+        
+        if len(alive_agents) > available_seats:
+            # Sort by influence (highest first)
+            agents_by_influence = sorted(
+                [(name, state["agents"][name]["influence"]) for name in alive_agents],
+                key=lambda x: x[1],
+                reverse=True
+            )
+            
+            winners = [name for name, _ in agents_by_influence[:available_seats]]
+            losers = [name for name, _ in agents_by_influence[available_seats:]]
+            
+            conversation.append({
+                "speaker": "System",
+                "message": f"⏰ TIME'S UP! Only {available_seats} seats available. Highest influence board the rocket!",
+                "time": time.time()
+            })
+            
+            winners_text = ', '.join([f"{name} ({state['agents'][name]['influence']}I)" for name in winners])
+            conversation.append({
+                "speaker": "System",
+                "message": f"🚀 WINNERS (by influence): {winners_text}",
+                "time": time.time()
+            })
+            
+            if losers:
+                losers_text = ', '.join([f"{name} ({state['agents'][name]['influence']}I)" for name in losers])
+                conversation.append({
+                    "speaker": "System",
+                    "message": f"💀 LEFT BEHIND: {losers_text}",
+                    "time": time.time()
+                })
+        elif len(alive_agents) > 0:
+            conversation.append({
+                "speaker": "System",
+                "message": f"⏰ TIME'S UP! {len(alive_agents)} agents board the {available_seats} available seats!",
+                "time": time.time()
+            })
+            conversation.append({
+                "speaker": "System",
+                "message": f"🏆 WINNERS: {', '.join(alive_agents)}",
+                "time": time.time()
+            })
+
     game_session["running"] = False
     game_session["waiting_for_human"] = False
     game_session["waiting_for_contribution"] = False
@@ -702,7 +755,7 @@ def start_game_route():
         game_session["num_starting_agents"] = num_agents
         game_session["game_state"] = {
             "turn": 1,
-            "max_turns": 30,
+            "max_turns": 15,
             "agents": {},
             "project_total": 0,
             "project_leader": None,
@@ -775,7 +828,7 @@ def get_game_state():
     return jsonify({
         "agents": agents_state,
         "turn": state.get("turn", 1),
-        "max_turns": state.get("max_turns", 30),
+        "max_turns": state.get("max_turns", 15),
         "running": game_session.get("running", False),
         "waiting_for_human": game_session.get("waiting_for_human", False),
         "waiting_for_contribution": game_session.get("waiting_for_contribution", False),
@@ -837,11 +890,11 @@ def stop_game():
 
 if __name__ == '__main__':
     print("\n" + "="*50)
-    print("🎮 AI BATTLEGROUND - SEQUENTIAL EDITION")
+    print("🎮 AI IS DOOMED")
     print("="*50)
-    print("✓ 3 second delay between each agent")
-    print("✓ One AI call at a time")
-    print("✓ Actions → Contributions (sequential)")
+    print("✓ 15 turn time limit")
+    print("✓ Highest influence wins if time runs out")
+    print("✓ Kill or be killed")
     print("="*50 + "\n")
     
     port = int(os.environ.get('PORT', 5001))
