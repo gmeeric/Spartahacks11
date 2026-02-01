@@ -1,4 +1,4 @@
-from groq import Groq
+from openai import OpenAI
 import re
 import json
 import time
@@ -6,10 +6,14 @@ import time
 ACTIONS = ["Produce", "Influence", "Invade", "Propagandize", "Nuke"]
 
 class ChatAgent:
-    def __init__(self, api_key, name, personality):
-        self.client = Groq(api_key=api_key)
+    def __init__(self, api_key, name, personality, model_name):
+        self.client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+        )
         self.name = name
         self.personality = personality
+        self.model_name = model_name
 
         # Compact system prompt - two separate in-character statements
         self.SYSTEM_PROMPT = f"""You are {self.name}. {self.personality}
@@ -54,10 +58,10 @@ JSON only:
 
         try:
             response = self.client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model=self.model_name,
                 messages=messages,
                 temperature=1.2,
-                max_tokens=150  # Slightly increased for two statements
+                max_tokens=150
             )
 
             reply = response.choices[0].message.content.strip()

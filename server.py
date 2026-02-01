@@ -14,44 +14,76 @@ state_lock = threading.Lock()
 # Import ChatAgent
 from chat import ChatAgent
 
-# Multiple API keys for rotation to avoid rate limiting
-API_KEYS_ENV = os.environ.get('GROQ_API_KEYS', '')
-if API_KEYS_ENV:
-    API_KEYS = [key.strip() for key in API_KEYS_ENV.split(',') if key.strip()]
-else:
-    # Fallback for local development
-    API_KEYS = [
-        os.environ.get("groq_key_1"),
-        os.environ.get("groq_key_2"),
-        os.environ.get("groq_key_3"),
-        os.environ.get("groq_key_4")
-    ]
+# OpenRouter API key (single key for all models)
+OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
 
-API_KEYS = [key for key in API_KEYS if key]
+if not OPENROUTER_API_KEY:
+    print("⚠️ WARNING: OPENROUTER_API_KEY not set!")
 
-print(f"Loaded {len(API_KEYS)} Groq API key(s)")
+print(f"Loaded OpenRouter API key: {'Yes' if OPENROUTER_API_KEY else 'No'}")
 
-current_key_index = 0
-
-def get_next_api_key():
-    """Rotate through API keys to distribute load"""
-    global current_key_index
-    key = API_KEYS[current_key_index]
-    current_key_index = (current_key_index + 1) % len(API_KEYS)
-    return key
-
-# 10 distinct character personas for AI agents
+# 10 distinct character personas with AI models
 PERSONALITIES = [
-    {"name": "Cowboy", "description": "Wild West cowboy - uses 'partner', 'reckon', 'varmint'"},
-    {"name": "Pirate", "description": "Pirate - says 'arr', 'matey', 'scallywag'"},
-    {"name": "Knight", "description": "Medieval knight - formal, honorable"},
-    {"name": "Scientist", "description": "Mad scientist - analytical"},
-    {"name": "Gangster", "description": "1920s mobster - says 'see?', 'wise guy'"},
-    {"name": "ValleyGirl", "description": "Valley girl - says 'like', 'totally'"},
-    {"name": "Shakespeare", "description": "Shakespearean - flowery dramatic language"},
-    {"name": "General", "description": "Military general - tactical commands"},
-    {"name": "Robot", "description": "Robot - cold logic, ALL CAPS"},
-    {"name": "Surfer", "description": "Surfer - says 'dude', 'gnarly', 'radical'"}
+    {
+        "name": "Cowboy",
+        "description": "Wild West cowboy - uses 'partner', 'reckon', 'varmint'",
+        "model": "arcee-ai/trinity-large-preview:free",
+        "model_display": "Trinity Large"
+    },
+    {
+        "name": "Pirate",
+        "description": "Pirate - says 'arr', 'matey', 'scallywag'",
+        "model": "upstage/solar-pro-3:free",
+        "model_display": "Solar Pro 3"
+    },
+    {
+        "name": "Knight",
+        "description": "Medieval knight - formal, honorable",
+        "model": "liquid/lfm-2.5-1.2b-thinking:free",
+        "model_display": "LFM Thinking"
+    },
+    {
+        "name": "Scientist",
+        "description": "Mad scientist - analytical",
+        "model": "allenai/molmo-2-8b:free",
+        "model_display": "Molmo 2"
+    },
+    {
+        "name": "Gangster",
+        "description": "1920s mobster - says 'see?', 'wise guy'",
+        "model": "nvidia/nemotron-3-nano-30b-a3b:free",
+        "model_display": "Nemotron Nano"
+    },
+    {
+        "name": "ValleyGirl",
+        "description": "Valley girl - says 'like', 'totally'",
+        "model": "qwen/qwen3-next-80b-a3b-instruct:free",
+        "model_display": "Qwen3 Next"
+    },
+    {
+        "name": "Shakespeare",
+        "description": "Shakespearean - flowery dramatic language",
+        "model": "openai/gpt-oss-120b:free",
+        "model_display": "GPT OSS"
+    },
+    {
+        "name": "General",
+        "description": "Military general - tactical commands",
+        "model": "z-ai/glm-4.5-air:free",
+        "model_display": "GLM 4.5"
+    },
+    {
+        "name": "Robot",
+        "description": "Robot - cold logic, ALL CAPS",
+        "model": "google/gemma-3n-e2b-it:free",
+        "model_display": "Gemma 3N"
+    },
+    {
+        "name": "Surfer",
+        "description": "Surfer - says 'dude', 'gnarly', 'radical'",
+        "model": "deepseek/deepseek-r1-0528:free",
+        "model_display": "DeepSeek R1"
+    }
 ]
 
 game_session = {
@@ -66,7 +98,8 @@ game_session = {
     "waiting_for_contribution": False,
     "human_contribution": None,
     "num_starting_agents": 0,
-    "agent_memory": {}
+    "agent_memory": {},
+    "agent_models": {}  # Add this to track which model each agent uses
 }
 
 # Seats thresholds for the rocket project
@@ -782,15 +815,17 @@ def start_game_route():
             personality_data = available_personalities[i % len(available_personalities)]
             name = personality_data["name"]
             personality_desc = personality_data["description"]
-            
-            api_key = get_next_api_key()
+            model_name = personality_data["model"]
+            model_display = personality_data["model_display"]
             
             game_session["agents"][name] = ChatAgent(
-                api_key=api_key,
+                api_key=OPENROUTER_API_KEY,
                 name=name,
-                personality=personality_desc
+                personality=personality_desc,
+                model_name=model_name
             )
-            print(f"✓ Created {name}")
+            game_session["agent_models"][name] = model_display  # Store for display
+            print(f"✓ Created {name} using {model_display}")
             
             game_session["game_state"]["agents"][name] = {
                 "resources": 0,
@@ -827,6 +862,7 @@ def get_game_state():
     agents_state = state.get("agents", {})
     return jsonify({
         "agents": agents_state,
+        "agent_models": game_session.get("agent_models", {}),  # Add this line
         "turn": state.get("turn", 1),
         "max_turns": state.get("max_turns", 15),
         "running": game_session.get("running", False),
