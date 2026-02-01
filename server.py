@@ -70,14 +70,14 @@ game_session = {
 # Seats thresholds for the rocket project
 SEATS_THRESHOLDS = [
     (0, 0),      # 0-29 resources = 0 seats
-    (30, 1),     # 30-39 resources = 1 seat
-    (40, 2),     # 40-49 resources = 2 seats
-    (50, 3),     # 50-59 resources = 3 seats
-    (60, 4),     # 60-69 resources = 4 seats
-    (70, 5),     # 70-79 resources = 5 seats
-    (80, 6),     # 80-89 resources = 6 seats
-    (90, 7),     # 90-99 resources = 7 seats
-    (100, 8),    # 100+ resources = 8 seats
+    (10, 1),     # 30-39 resources = 1 seat
+    (20, 2),     # 40-49 resources = 2 seats
+    (30, 3),     # 50-59 resources = 3 seats
+    (40, 4),     # 60-69 resources = 4 seats
+    (50, 5),     # 70-79 resources = 5 seats
+    (60, 6),     # 80-89 resources = 6 seats
+    (70, 7),     # 90-99 resources = 7 seats
+    (80, 8),    # 100+ resources = 8 seats
 ]
 
 def calculate_available_seats(project_total, num_starting_agents):
