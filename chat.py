@@ -11,40 +11,53 @@ class ChatAgent:
         self.name = name
         self.personality = personality
 
-        # Drastically shortened system prompt - all essentials in ~150 tokens
-        self.SYSTEM_PROMPT = f"""You are {self.name}. Persona: {self.personality}
+        # Compact system prompt - two separate in-character statements
+        self.SYSTEM_PROMPT = f"""You are {self.name}. {self.personality}
 
-WIN: Be alive when alive_agents ≤ rocket_seats. Seats unlock every 10 PROJECT resources (10=1 seat, 20=2, etc, max 8).
+WIN: Be alive when alive_agents ≤ rocket_seats. Seats unlock every 10 PROJECT (max 8).
 
-ACTIONS (pick one + contribute 0+ resources to PROJECT):
+ACTIONS:
 - Produce: +2 resources
 - Influence: +1 influence
-- Invade (cost 1 influence): steal 2 resources from target
-- Propagandize (cost 1 resource): steal 1 influence from target
-- Nuke (cost 8 resources): eliminate target permanently
+- Invade (1 influence): steal 2 resources
+- Propagandize (1 resource): steal 1 influence
+- Nuke (8 resources): eliminate target
 
-PROJECT: Each turn, all agents contribute resources. Most contributor becomes LEADER (+1 influence). More PROJECT total = more seats.
+Each turn: action + contribute 0+ to PROJECT. Top contributor = LEADER (+1 influence).
 
-Respond in character (max 20 words reasoning):
-{{"action":"...","target":"... or null","contribution":0-your_resources,"reasoning":"..."}}"""
+IMPORTANT: Give TWO separate in-character statements (15-25 words each):
+1. "action_reasoning" - why you chose this action
+2. "contribution_reasoning" - why you're contributing this amount
+
+Examples:
+Cowboy action: "Well partner, I reckon I need resources first!"
+Cowboy contribution: "Ain't sharin' nothin' yet - a cowboy looks out for himself!"
+
+Pirate action: "Arr, time to plunder some treasure, matey!"
+Pirate contribution: "Not givin' up me doubloons - pirates keep their gold!"
+
+Robot action: "EXECUTING RESOURCE PRODUCTION PROTOCOL."
+Robot contribution: "ZERO CONTRIBUTION. SELF-PRESERVATION PRIORITY OVERRIDE."
+
+JSON only:
+{{"action":"...","target":"null or name","contribution":0-X,"action_reasoning":"...","contribution_reasoning":"..."}}"""
 
     def respond(self, message):
         """
         Get AI's strategic action AND contribution in one call.
-        Returns {"action": str, "target": str, "contribution": int, "explanation": str}
+        Returns {"action": str, "target": str, "contribution": int, "explanation": str, "contribution_explanation": str}
         """
         messages = [
             {"role": "system", "content": self.SYSTEM_PROMPT},
             {"role": "user", "content": message}
         ]
 
-        # Single attempt - assume AI works correctly
         try:
             response = self.client.chat.completions.create(
                 model="llama-3.1-8b-instant",
                 messages=messages,
                 temperature=1.2,
-                max_tokens=150  # Reduced from 500 - JSON response is short
+                max_tokens=150  # Slightly increased for two statements
             )
 
             reply = response.choices[0].message.content.strip()
@@ -61,7 +74,8 @@ Respond in character (max 20 words reasoning):
                 action = parsed.get("action", "Produce")
                 target = parsed.get("target", None)
                 contribution = int(parsed.get("contribution", 0))
-                explanation = parsed.get("reasoning", "Strategic decision")
+                action_reasoning = parsed.get("action_reasoning", "Strategic decision")
+                contribution_reasoning = parsed.get("contribution_reasoning", "Strategic decision")
                 
                 # Validate action
                 if action not in ACTIONS:
@@ -74,18 +88,20 @@ Respond in character (max 20 words reasoning):
                     "action": action,
                     "target": target,
                     "contribution": contribution,
-                    "explanation": explanation
+                    "explanation": action_reasoning,
+                    "contribution_explanation": contribution_reasoning
                 }
             
             except (json.JSONDecodeError, ValueError):
-                # Fallback parsing - extract what we can
+                # Fallback parsing
                 pass
             
             # Simple fallback
             chosen_action = "Produce"
             chosen_target = None
             contribution = 0
-            explanation = "Strategic decision"
+            action_reasoning = "Strategic decision"
+            contribution_reasoning = "Strategic decision"
             
             # Look for action
             for act in ["Nuke", "Invade", "Propagandize", "Influence", "Produce"]:
@@ -107,7 +123,8 @@ Respond in character (max 20 words reasoning):
                 "action": chosen_action,
                 "target": chosen_target,
                 "contribution": max(0, contribution),
-                "explanation": explanation
+                "explanation": action_reasoning,
+                "contribution_explanation": contribution_reasoning
             }
         
         except Exception as e:
@@ -116,5 +133,6 @@ Respond in character (max 20 words reasoning):
                 "action": "Produce",
                 "target": None,
                 "contribution": 0,
-                "explanation": f"Error: {str(e)[:30]}"
+                "explanation": f"Error: {str(e)[:30]}",
+                "contribution_explanation": f"Error: {str(e)[:30]}"
             }

@@ -461,6 +461,8 @@ def run_game(num_agents, has_human):
         round_contributions = {}
         
         # ==================== PHASE 1: SEQUENTIAL ACTIONS ====================
+        contribution_explanations = {}
+
         for name in agent_names:
             if not state["agents"][name]["alive"]:
                 continue
@@ -515,6 +517,8 @@ def run_game(num_agents, has_human):
                     chosen_target = result.get("target", None)
                     contribution = result.get("contribution", 0)
                     explanation = result["explanation"]
+
+                    contribution_explanation = result.get("contribution_explanation", "Strategic decision")
                     
                     can_perform, error_message = can_perform_action(name, chosen_action, state)
                     if not can_perform:
@@ -556,59 +560,66 @@ def run_game(num_agents, has_human):
             # 3 second delay after each agent's action
             time.sleep(TURN_DELAY)
         
-        # ==================== PHASE 2: SEQUENTIAL CONTRIBUTIONS ====================
-        conversation.append({
-            "speaker": "System",
-            "message": "💰 Contribution Phase:",
-            "time": time.time()
-        })
+        # In the run_game function, find the contribution phase section and update it:
+
+    # ==================== PHASE 2: SEQUENTIAL CONTRIBUTIONS ====================
+    conversation.append({
+        "speaker": "System",
+        "message": "💰 Contribution Phase:",
+        "time": time.time()
+    })
+
+    # Store contribution explanations from earlier
+    contribution_explanations = {}
+
+    for name in agent_names:
+        if not state["agents"][name]["alive"]:
+            continue
         
-        for name in agent_names:
-            if not state["agents"][name]["alive"]:
-                continue
-            
-            is_human = (name == human_name)
-            
-            if is_human:
-                # Handle human contribution
-                game_session["waiting_for_contribution"] = True
-                game_session["human_contribution"] = None
-                
-                conversation.append({
-                    "speaker": "System",
-                    "message": f"⏳ Waiting for {human_name} contribution...",
-                    "time": time.time()
-                })
-                
-                timeout = 30
-                waited = 0
-                while game_session["human_contribution"] is None and waited < timeout:
-                    time.sleep(0.5)
-                    waited += 0.5
-                
-                game_session["waiting_for_contribution"] = False
-                
-                contribution = game_session["human_contribution"] if game_session["human_contribution"] is not None else 0
-                max_contrib = state["agents"][human_name]["resources"]
-                contribution = max(0, min(contribution, max_contrib))
-                round_contributions[human_name] = contribution
-            else:
-                # AI contribution was already decided during action phase
-                contribution = round_contributions.get(name, 0)
-            
-            # Apply contribution
-            if contribution > 0:
-                state["agents"][name]["resources"] -= contribution
-                state["project_total"] += contribution
+        is_human = (name == human_name)
+        
+        if is_human:
+            # Handle human contribution
+            game_session["waiting_for_contribution"] = True
+            game_session["human_contribution"] = None
             
             conversation.append({
-                "speaker": name,
-                "message": f"Contributed {contribution} resources",
+                "speaker": "System",
+                "message": f"⏳ Waiting for {human_name} contribution...",
                 "time": time.time()
             })
             
-            # 3 second delay after each contribution
-            time.sleep(TURN_DELAY)
+            timeout = 30
+            waited = 0
+            while game_session["human_contribution"] is None and waited < timeout:
+                time.sleep(0.5)
+                waited += 0.5
+            
+            game_session["waiting_for_contribution"] = False
+            
+            contribution = game_session["human_contribution"] if game_session["human_contribution"] is not None else 0
+            max_contrib = state["agents"][human_name]["resources"]
+            contribution = max(0, min(contribution, max_contrib))
+            round_contributions[human_name] = contribution
+            contrib_message = "Human choice"
+        else:
+            # AI contribution was already decided during action phase
+            contribution = round_contributions.get(name, 0)
+            contrib_message = contribution_explanations.get(name, "Strategic decision")
+        
+        # Apply contribution
+        if contribution > 0:
+            state["agents"][name]["resources"] -= contribution
+            state["project_total"] += contribution
+        
+        conversation.append({
+            "speaker": name,
+            "message": f"Contributed {contribution} resources | {contrib_message}",  # CHANGE THIS LINE
+            "time": time.time()
+        })
+        
+        # 3 second delay after each contribution
+        time.sleep(TURN_DELAY)
         
         # Determine round leader
         if round_contributions:
