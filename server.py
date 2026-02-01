@@ -332,63 +332,69 @@ def run_game(num_agents, has_human):
             else:
                 # AI agent
                 agent = game_session["agents"][name]
-
-                # Build state summary for AI
-                def build_state_summary(include_error=None):
-                    new_messages = conversation[last_seen_index[name]:]
-                    state_summary = f"Turn {state['turn']}\n\n"
-                    state_summary += "Current Status:\n"
-                    for n, info in state["agents"].items():
-                        alive_text = "Alive" if info["alive"] else "Dead"
-                        state_summary += f"  {n}: resources={info['resources']}, influence={info['influence']}, {alive_text}\n"
-                    
-                    if include_error:
-                        state_summary += f"\n⚠️ INVALID ACTION: {include_error}\n"
-                        state_summary += "You must choose a different action that you can afford.\n\n"
-                    
-                    if new_messages:
-                        state_summary += "\nRecent actions:\n"
-                        for msg in new_messages[-5:]:  # Last 5 messages
-                            state_summary += f"  {msg['speaker']}: {msg['message']}\n"
-                    
-                    return state_summary
-
-                # Try to get a valid action (with retries)
-                max_retries = 3
-                chosen_action = None
-                explanation = None
                 
-                for attempt in range(max_retries):
-                    try:
-                        # Build state summary (with error message if retrying)
-                        if attempt == 0:
-                            state_summary = build_state_summary()
-                        else:
-                            state_summary = build_state_summary(include_error=error_message)
+                # Skip if agent is None (shouldn't happen for AI, but safety check)
+                if agent is None:
+                    print(f"✗ Error: AI agent {name} is None")
+                    chosen_action = "Produce"
+                    explanation = "Error - agent is None"
+                else:
+                    # Build state summary for AI
+                    def build_state_summary(include_error=None):
+                        new_messages = conversation[last_seen_index[name]:]
+                        state_summary = f"Turn {state['turn']}\n\n"
+                        state_summary += "Current Status:\n"
+                        for n, info in state["agents"].items():
+                            alive_text = "Alive" if info["alive"] else "Dead"
+                            state_summary += f"  {n}: resources={info['resources']}, influence={info['influence']}, {alive_text}\n"
                         
-                        result = agent.respond(state_summary)
-                        chosen_action = result["action"]
-                        explanation = result["explanation"]
+                        if include_error:
+                            state_summary += f"\n⚠️ INVALID ACTION: {include_error}\n"
+                            state_summary += "You must choose a different action that you can afford.\n\n"
                         
-                        # Check if action is valid
-                        can_perform, error_message = can_perform_action(name, chosen_action, state)
+                        if new_messages:
+                            state_summary += "\nRecent actions:\n"
+                            for msg in new_messages[-5:]:  # Last 5 messages
+                                state_summary += f"  {msg['speaker']}: {msg['message']}\n"
                         
-                        if can_perform:
-                            print(f"✓ {name} chose: {chosen_action} - {explanation}")
-                            break
-                        else:
-                            print(f"⚠ {name} tried {chosen_action} but: {error_message}. Retry {attempt + 1}/{max_retries}")
-                            if attempt == max_retries - 1:
-                                # Last retry failed, force Produce
-                                print(f"✗ {name} failed all retries, forcing Produce")
-                                chosen_action = "Produce"
-                                explanation = "Forced to produce after invalid action attempts"
+                        return state_summary
+
+                    # Try to get a valid action (with retries)
+                    max_retries = 3
+                    chosen_action = None
+                    explanation = None
                     
-                    except Exception as e:
-                        print(f"✗ Error getting response from {name}: {e}")
-                        chosen_action = "Produce"
-                        explanation = "Error occurred, defaulting to Produce"
-                        break
+                    for attempt in range(max_retries):
+                        try:
+                            # Build state summary (with error message if retrying)
+                            if attempt == 0:
+                                state_summary = build_state_summary()
+                            else:
+                                state_summary = build_state_summary(include_error=error_message)
+                            
+                            result = agent.respond(state_summary)
+                            chosen_action = result["action"]
+                            explanation = result["explanation"]
+                            
+                            # Check if action is valid
+                            can_perform, error_message = can_perform_action(name, chosen_action, state)
+                            
+                            if can_perform:
+                                print(f"✓ {name} chose: {chosen_action} - {explanation}")
+                                break
+                            else:
+                                print(f"⚠ {name} tried {chosen_action} but: {error_message}. Retry {attempt + 1}/{max_retries}")
+                                if attempt == max_retries - 1:
+                                    # Last retry failed, force Produce
+                                    print(f"✗ {name} failed all retries, forcing Produce")
+                                    chosen_action = "Produce"
+                                    explanation = "Forced to produce after invalid action attempts"
+                        
+                        except Exception as e:
+                            print(f"✗ Error getting response from {name}: {e}")
+                            chosen_action = "Produce"
+                            explanation = "Error occurred, defaulting to Produce"
+                            break
 
             # Apply action (we know it's valid now)
             action_result = apply_action(name, chosen_action, state)
@@ -460,6 +466,8 @@ def start_game_route():
             # Human player is Agent1
             name = "Agent1"
             game_session["human_player"] = name
+            # Add a placeholder to agents dict so Agent1 appears in agent_names
+            game_session["agents"][name] = None  # Human player, no ChatAgent needed
             game_session["game_state"]["agents"][name] = {
                 "resources": 0,
                 "influence": 0,
