@@ -918,7 +918,8 @@ function startGame() {
     const num_agents = document.getElementById('num_agents').value || 10;
     const include_human = document.getElementById('include_human').checked;
     
-    fetch('http://localhost:5001/api/start', {
+    // Use relative URL for production (works with any domain)
+    fetch('/api/start', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({num_agents, include_human})
@@ -936,12 +937,12 @@ function startGame() {
     })
     .catch(err => {
         console.error('Error starting game:', err);
-        alert('Failed to start game. Make sure the Flask server is running on port 5001.');
+        alert('Failed to start game. Please try again.');
     });
 }
 
 function stopGame() {
-    fetch('http://localhost:5001/api/stop', {method: 'POST'})
+    fetch('/api/stop', {method: 'POST'})
     .then(() => {
         clearInterval(updateInterval);
         document.getElementById('humanActionPanel').classList.remove('active');
@@ -954,20 +955,20 @@ function stopGame() {
 }
 
 function submitAction(action) {
-    fetch('http://localhost:5001/api/human_action', {
+    fetch('/api/human_action', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
             action: action,
-            target: selectedTarget  // Include the selected target
+            target: selectedTarget
         })
     })
     .then(r => r.json())
     .then(data => {
         console.log('Action submitted:', data);
         document.getElementById('humanActionPanel').classList.remove('active');
-        selectedTarget = null;  // Reset target after submission
-        targetButtonsInitialized = false;  // Reset flag for next turn
+        selectedTarget = null;
+        targetButtonsInitialized = false;
     })
     .catch(err => console.error('Error submitting action:', err));
 }
@@ -975,7 +976,7 @@ function submitAction(action) {
 function submitContribution() {
     const contribution = parseInt(document.getElementById('contributionSlider').value);
     
-    fetch('http://localhost:5001/api/human_contribution', {
+    fetch('/api/human_contribution', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({contribution})
@@ -1017,7 +1018,7 @@ function updateContributionPanel(myStats) {
 }
 
 function updateGame() {
-    fetch('http://localhost:5001/api/game_state')
+    fetch('/api/game_state')
     .then(r => r.json())
     .then(data => {
         const statusDiv = document.getElementById('status');
@@ -1026,22 +1027,19 @@ function updateGame() {
             statusDiv.textContent = `🚀 Turn ${data.turn}/${data.max_turns} - Contribution Phase - Waiting for ${data.human_player}...`;
             statusDiv.className = 'status contributing';
             
-            // Show contribution panel (only initialize once)
             const panel = document.getElementById('contributionPanel');
             if (!panel.classList.contains('active')) {
                 panel.classList.add('active');
             }
             
-            // Update contribution slider (will only initialize once due to flag)
             if (data.agents[data.human_player]) {
                 updateContributionPanel(data.agents[data.human_player]);
             }
         } else {
-            // Hide contribution panel when not in contribution phase
             const panel = document.getElementById('contributionPanel');
             if (panel.classList.contains('active')) {
                 panel.classList.remove('active');
-                contributionPanelInitialized = false; // Only reset when actually hiding
+                contributionPanelInitialized = false;
             }
         }
         
@@ -1049,14 +1047,12 @@ function updateGame() {
             statusDiv.textContent = `⏳ Turn ${data.turn}/${data.max_turns} - Waiting for ${data.human_player} to act...`;
             statusDiv.className = 'status waiting';
             
-            // Show human action panel
             const panel = document.getElementById('humanActionPanel');
             if (!panel.classList.contains('active')) {
                 panel.classList.add('active');
-                targetButtonsInitialized = false; // Reset flag when showing panel
+                targetButtonsInitialized = false;
             }
             
-            // Update button states and target selection
             if (data.agents[data.human_player]) {
                 updateActionButtons(data.agents[data.human_player], data);
             }
@@ -1070,12 +1066,10 @@ function updateGame() {
             document.getElementById('humanActionPanel').classList.remove('active');
         }
 
-        // Update project stats
         document.getElementById('projectTotal').textContent = data.project_total || 0;
         document.getElementById('availableSeats').textContent = data.available_seats || 0;
         document.getElementById('projectLeader').textContent = data.project_leader || 'None';
 
-        // Update agent stats
         const panel = document.getElementById('agents-panel');
         panel.innerHTML = '';
         for (const name in data.agents) {
@@ -1112,8 +1106,7 @@ function updateGame() {
             panel.appendChild(card);
         }
 
-        // Update chat
-        fetch('http://localhost:5001/api/conversation')
+        fetch('/api/conversation')
         .then(r => r.json())
         .then(convData => {
             const chatDiv = document.getElementById('chat');

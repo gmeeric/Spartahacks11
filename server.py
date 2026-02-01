@@ -3,6 +3,7 @@ from flask_cors import CORS
 import threading
 import time
 import random
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -11,13 +12,19 @@ CORS(app)
 from chat import ChatAgent
 
 # Multiple API keys for rotation to avoid rate limiting
-# Add as many keys as you want - the more keys, the less rate limiting!
-API_KEYS = [
-    "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",
-    "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",
-    "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",
-    "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"
-]
+# Load from environment variable for security
+API_KEYS_ENV = os.environ.get('GROQ_API_KEYS', '')
+if API_KEYS_ENV:
+    API_KEYS = [key.strip() for key in API_KEYS_ENV.split(',') if key.strip()]
+else:
+    # Fallback for local development - REPLACE WITH YOUR KEYS
+    API_KEYS = [
+        "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",
+        "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",
+        "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",
+        "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"
+    ]
+
 current_key_index = 0
 
 def get_next_api_key():
@@ -945,4 +952,8 @@ if __name__ == '__main__':
     print("✓ Seats system: max = (starting agents - 1)")
     print("="*50 + "\n")
     
-    app.run(debug=True, port=5001, threaded=True)
+    # Get port from environment variable (for deployment platforms)
+    port = int(os.environ.get('PORT', 5001))
+    
+    # Use 0.0.0.0 to allow external connections in production
+    app.run(host='0.0.0.0', port=port, threaded=True)
