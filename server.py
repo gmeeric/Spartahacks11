@@ -10,6 +10,9 @@ import concurrent.futures
 app = Flask(__name__)
 CORS(app)
 
+# Lock to protect game state modifications during parallel processing
+state_lock = threading.Lock()
+
 # Import ChatAgent - no fallback, real AI only
 from chat import ChatAgent
 
@@ -172,70 +175,90 @@ def can_perform_action(name, action, state):
 
 def apply_action(name, action, target, state):
     """Apply an agent's action to the game state with specified target"""
-    agents_state = state["agents"]
-    if not agents_state[name]["alive"]:
-        return None
+    # Lock to prevent race conditions when multiple agents target the same victim
+    with state_lock:
+        agents_state = state["agents"]
+        if not agents_state[name]["alive"]:
+            return None
 
-    result_message = None
-    
-    if action == "Produce":
-        agents_state[name]["resources"] += 2
-        result_message = f"gained 2 resources"
+        result_message = None
         
-    elif action == "Influence":
-        agents_state[name]["influence"] += 1
-        result_message = f"gained 1 influence"
-        
-    elif action == "Invade":
-        agents_state[name]["influence"] -= 1
-        
-        # Use AI-specified target if valid, otherwise random
-        valid_targets = get_valid_targets_for_invade(name, state)
-        if target and target in valid_targets:
-            chosen_target = target
-        elif valid_targets:
-            chosen_target = random.choice(valid_targets)
-        else:
-            return "tried to invade but no valid targets"
-        
-        stolen = min(2, agents_state[chosen_target]["resources"])
-        agents_state[chosen_target]["resources"] -= stolen
-        agents_state[name]["resources"] += stolen
-        result_message = f"invaded {chosen_target} and stole {stolen} resources"
+        if action == "Produce":
+            agents_state[name]["resources"] += 2
+            result_message = f"gained 2 resources"
             
-    elif action == "Propagandize":
-        agents_state[name]["resources"] -= 1
-        
-        # Use AI-specified target if valid, otherwise random
-        valid_targets = get_valid_targets_for_propagandize(name, state)
-        if target and target in valid_targets:
-            chosen_target = target
-        elif valid_targets:
-            chosen_target = random.choice(valid_targets)
-        else:
-            return "tried to propagandize but no valid targets"
-        
-        stolen = min(1, agents_state[chosen_target]["influence"])
-        agents_state[chosen_target]["influence"] -= stolen
-        agents_state[name]["influence"] += stolen
-        result_message = f"propagandized against {chosen_target} and stole {stolen} influence"
+        elif action == "Influence":
+            agents_state[name]["influence"] += 1
+            result_message = f"gained 1 influence"
             
-    elif action == "Nuke":
-        agents_state[name]["resources"] -= 8
+        elif action == "Invade":
+            # Revalidate: Make sure we still have the influence (in case another thread stole it)
+            if agents_state[name]["influence"] < 1:
+                return "tried to invade but lost influence before executing"
+            
+            agents_state[name]["influence"] -= 1
+            
+            # Use AI-specified target if valid, otherwise random
+            valid_targets = get_valid_targets_for_invade(name, state)
+            if target and target in valid_targets:
+                chosen_target = target
+            elif valid_targets:
+                chosen_target = random.choice(valid_targets)
+            else:
+                # Refund the influence since we couldn't complete the action
+                agents_state[name]["influence"] += 1
+                return "tried to invade but no valid targets"
+            
+            stolen = min(2, agents_state[chosen_target]["resources"])
+            agents_state[chosen_target]["resources"] -= stolen
+            agents_state[name]["resources"] += stolen
+            result_message = f"invaded {chosen_target} and stole {stolen} resources"
+                
+        elif action == "Propagandize":
+            # Revalidate: Make sure we still have the resources
+            if agents_state[name]["resources"] < 1:
+                return "tried to propagandize but lost resources before executing"
+            
+            agents_state[name]["resources"] -= 1
+            
+            # Use AI-specified target if valid, otherwise random
+            valid_targets = get_valid_targets_for_propagandize(name, state)
+            if target and target in valid_targets:
+                chosen_target = target
+            elif valid_targets:
+                chosen_target = random.choice(valid_targets)
+            else:
+                # Refund the resource since we couldn't complete the action
+                agents_state[name]["resources"] += 1
+                return "tried to propagandize but no valid targets"
+            
+            stolen = min(1, agents_state[chosen_target]["influence"])
+            agents_state[chosen_target]["influence"] -= stolen
+            agents_state[name]["influence"] += stolen
+            result_message = f"propagandized against {chosen_target} and stole {stolen} influence"
+                
+        elif action == "Nuke":
+            # Revalidate: Make sure we still have the resources and target is still alive
+            if agents_state[name]["resources"] < 8:
+                return "tried to nuke but lost resources before executing"
+            
+            agents_state[name]["resources"] -= 8
+            
+            # Use AI-specified target if valid, otherwise random
+            valid_targets = get_valid_targets_for_nuke(name, state)
+            if target and target in valid_targets:
+                chosen_target = target
+            elif valid_targets:
+                chosen_target = random.choice(valid_targets)
+            else:
+                # Refund the resources since we couldn't complete the action
+                agents_state[name]["resources"] += 8
+                return "tried to nuke but target was already eliminated"
+            
+            agents_state[chosen_target]["alive"] = False
+            result_message = f"NUKED {chosen_target} - they are eliminated!"
         
-        # Use AI-specified target if valid, otherwise random
-        valid_targets = get_valid_targets_for_nuke(name, state)
-        if target and target in valid_targets:
-            chosen_target = target
-        elif valid_targets:
-            chosen_target = random.choice(valid_targets)
-        else:
-            return "tried to nuke but no valid targets"
-        
-        agents_state[chosen_target]["alive"] = False
-        result_message = f"NUKED {chosen_target} - they are eliminated!"
-    
-    return result_message
+        return result_message
 
 def build_strategic_prompt(name, state, conversation, last_seen_index, include_error=None):
     """Build a detailed strategic prompt for the AI agent"""
