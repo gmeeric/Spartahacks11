@@ -40,6 +40,27 @@ def get_next_api_key():
     current_key_index = (current_key_index + 1) % len(API_KEYS)
     return key
 
+# 8 FREE GROQ MODELS - Each agent will use a different one!
+GROQ_MODELS = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-70b-versatile", 
+    "llama-3.1-8b-instant",
+    "llama-3.2-1b-preview",
+    "llama-3.2-3b-preview",
+    "mixtral-8x7b-32768",
+    "gemma2-9b-it",
+    "llama-3.2-90b-text-preview"
+]
+
+current_model_index = 0
+
+def get_next_model():
+    """Rotate through the 8 different Groq models"""
+    global current_model_index
+    model = GROQ_MODELS[current_model_index]
+    current_model_index = (current_model_index + 1) % len(GROQ_MODELS)
+    return model
+
 # 10 distinct character personas for AI agents
 PERSONALITIES = [
     {"name": "Cowboy", "description": "Wild West cowboy - uses 'partner', 'reckon', 'varmint'"},
@@ -66,7 +87,8 @@ game_session = {
     "waiting_for_contribution": False,
     "human_contribution": None,
     "num_starting_agents": 0,
-    "agent_memory": {}
+    "agent_memory": {},
+    "agent_models": {}  # Track which model each agent is using
 }
 
 # Seats thresholds for the rocket project
@@ -428,6 +450,16 @@ def run_game(num_agents, has_human):
             "message": f"🎮 HUMAN: {human_name}",
             "time": time.time()
         })
+    
+    # Show which AI model each agent is using
+    for name in agent_names:
+        if name != human_name and name in game_session["agent_models"]:
+            model_name = game_session["agent_models"][name]
+            conversation.append({
+                "speaker": "System",
+                "message": f"🤖 {name} powered by {model_name}",
+                "time": time.time()
+            })
 
     while game_session["running"] and state["turn"] <= state["max_turns"]:
         alive_agents = [name for name in agent_names if state["agents"][name]["alive"]]
@@ -514,7 +546,7 @@ def run_game(num_agents, has_human):
                     
             else:
                 # Handle AI action
-                print(f"🎯 {name}'s turn")
+                print(f"🎯 {name}'s turn (using {game_session['agent_models'].get(name, 'unknown')})")
                 
                 agent = game_session["agents"][name]
                 minimal_prompt = build_minimal_prompt(name, state, conversation, memory)
@@ -746,6 +778,7 @@ def start_game_route():
         game_session["conversation"] = []
         game_session["agents"] = {}
         game_session["agent_memory"] = {}
+        game_session["agent_models"] = {}
         game_session["human_player"] = None
         game_session["waiting_for_human"] = False
         game_session["human_action"] = None
@@ -784,13 +817,16 @@ def start_game_route():
             personality_desc = personality_data["description"]
             
             api_key = get_next_api_key()
+            model = get_next_model()  # Get the next model in rotation
             
             game_session["agents"][name] = ChatAgent(
                 api_key=api_key,
                 name=name,
-                personality=personality_desc
+                personality=personality_desc,
+                model=model  # Pass the model to the agent
             )
-            print(f"✓ Created {name}")
+            game_session["agent_models"][name] = model  # Track which model this agent uses
+            print(f"✓ Created {name} using model: {model}")
             
             game_session["game_state"]["agents"][name] = {
                 "resources": 0,
@@ -801,7 +837,7 @@ def start_game_route():
         game_session["running"] = True
         threading.Thread(target=run_game, args=(num_agents, include_human), daemon=True).start()
 
-        print(f"✓ Game started - SEQUENTIAL VERSION")
+        print(f"✓ Game started - 8 DIFFERENT AI MODELS - SEQUENTIAL VERSION")
         
         return jsonify({
             "status": "Game started!", 
@@ -890,7 +926,12 @@ def stop_game():
 
 if __name__ == '__main__':
     print("\n" + "="*50)
-    print("🎮 AI IS DOOMED")
+    print("🎮 AI IS DOOMED - 8 MODELS EDITION")
+    print("="*50)
+    print("✓ Each AI agent uses a different Groq model!")
+    print("✓ Models used:")
+    for i, model in enumerate(GROQ_MODELS, 1):
+        print(f"  {i}. {model}")
     print("="*50)
     print("✓ 15 turn time limit")
     print("✓ Highest influence wins if time runs out")
