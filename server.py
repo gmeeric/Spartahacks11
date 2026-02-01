@@ -23,66 +23,67 @@ if not OPENROUTER_API_KEY:
 print(f"Loaded OpenRouter API key: {'Yes' if OPENROUTER_API_KEY else 'No'}")
 
 # 10 distinct character personas with AI models
+# Using more reliable free models
 PERSONALITIES = [
     {
         "name": "Cowboy",
         "description": "Wild West cowboy - uses 'partner', 'reckon', 'varmint'",
-        "model": "arcee-ai/trinity-large-preview:free",
-        "model_display": "Trinity Large"
+        "model": "meta-llama/llama-3.2-3b-instruct:free",
+        "model_display": "Llama 3.2 3B"
     },
     {
         "name": "Pirate",
         "description": "Pirate - says 'arr', 'matey', 'scallywag'",
-        "model": "upstage/solar-pro-3:free",
-        "model_display": "Solar Pro 3"
+        "model": "meta-llama/llama-3.2-1b-instruct:free",
+        "model_display": "Llama 3.2 1B"
     },
     {
         "name": "Knight",
         "description": "Medieval knight - formal, honorable",
-        "model": "liquid/lfm-2.5-1.2b-thinking:free",
-        "model_display": "LFM Thinking"
+        "model": "meta-llama/llama-3.1-8b-instruct:free",
+        "model_display": "Llama 3.1 8B"
     },
     {
         "name": "Scientist",
         "description": "Mad scientist - analytical",
-        "model": "allenai/molmo-2-8b:free",
-        "model_display": "Molmo 2"
+        "model": "google/gemini-flash-1.5-8b:free",
+        "model_display": "Gemini Flash 1.5"
     },
     {
         "name": "Gangster",
         "description": "1920s mobster - says 'see?', 'wise guy'",
-        "model": "nvidia/nemotron-3-nano-30b-a3b:free",
-        "model_display": "Nemotron Nano"
+        "model": "mistralai/mistral-7b-instruct:free",
+        "model_display": "Mistral 7B"
     },
     {
         "name": "ValleyGirl",
         "description": "Valley girl - says 'like', 'totally'",
-        "model": "qwen/qwen3-next-80b-a3b-instruct:free",
-        "model_display": "Qwen3 Next"
+        "model": "qwen/qwen-2-7b-instruct:free",
+        "model_display": "Qwen 2 7B"
     },
     {
         "name": "Shakespeare",
         "description": "Shakespearean - flowery dramatic language",
-        "model": "openai/gpt-oss-120b:free",
-        "model_display": "GPT OSS"
+        "model": "microsoft/phi-3-mini-128k-instruct:free",
+        "model_display": "Phi 3 Mini"
     },
     {
         "name": "General",
         "description": "Military general - tactical commands",
-        "model": "z-ai/glm-4.5-air:free",
-        "model_display": "GLM 4.5"
+        "model": "google/gemini-2.0-flash-thinking-exp:free",
+        "model_display": "Gemini 2.0 Thinking"
     },
     {
         "name": "Robot",
         "description": "Robot - cold logic, ALL CAPS",
-        "model": "google/gemma-3n-e2b-it:free",
-        "model_display": "Gemma 3N"
+        "model": "meta-llama/llama-3.2-3b-instruct:free",
+        "model_display": "Llama 3.2 3B"
     },
     {
         "name": "Surfer",
         "description": "Surfer - says 'dude', 'gnarly', 'radical'",
-        "model": "deepseek/deepseek-r1-0528:free",
-        "model_display": "DeepSeek R1"
+        "model": "nousresearch/hermes-3-llama-3.1-405b:free",
+        "model_display": "Hermes 405B"
     }
 ]
 

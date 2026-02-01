@@ -57,12 +57,19 @@ JSON only:
         ]
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                temperature=1.2,
-                max_tokens=150
-            )
+            # Build request parameters - only include supported params
+            request_params = {
+                "model": self.model_name,
+                "messages": messages,
+                "max_tokens": 150
+            }
+            
+            # Only add temperature for models that support it
+            # Skip temperature for models that might not support it
+            if not any(x in self.model_name.lower() for x in ['glm', 'gemma']):
+                request_params["temperature"] = 1.2
+
+            response = self.client.chat.completions.create(**request_params)
 
             reply = response.choices[0].message.content.strip()
             

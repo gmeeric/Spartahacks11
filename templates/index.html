@@ -645,6 +645,13 @@ button:disabled {
     color: var(--project-color);
 }
 
+.status-badge.model {
+    background: rgba(100, 150, 255, 0.2);
+    color: #6496ff;
+    font-size: 0.75rem;
+    margin-top: 5px;
+}
+
 /* Chat Container */
 .chat-section {
     animation: fadeIn 1s ease-out 0.9s backwards;
@@ -787,7 +794,7 @@ button:disabled {
         <input type="number" id="num_agents" placeholder="Number of agents" value="10" min="2" max="10">
         <label class="checkbox-label">
             <input type="checkbox" id="include_human">
-            Play as Agent1
+            Play as Human
         </label>
         <button class="start-btn" onclick="startGame()">Launch Battle</button>
         <button class="stop-btn" onclick="stopGame()">Emergency Stop</button>
@@ -1067,7 +1074,8 @@ function updateGame() {
             const agent = data.agents[name];
             const isHuman = name === data.human_player;
             const isLeader = name === data.project_leader;
-            const modelName = data.agent_models ? data.agent_models[name] : '';
+            const modelName = data.agent_models && data.agent_models[name] ? data.agent_models[name] : '';
+            
             const card = document.createElement('div');
             card.className = 'agent-card' + 
                 (agent.alive ? '' : ' dead') + 
@@ -1078,7 +1086,7 @@ function updateGame() {
             if (isHuman) {
                 badges += '<div class="status-badge human">HUMAN</div>';
             } else if (modelName) {
-                badges += `<div class="status-badge" style="background: rgba(100, 150, 255, 0.2); color: #6496ff; font-size: 0.75rem;">🤖 ${modelName}</div>`;
+                badges += `<div class="status-badge model">🤖 ${modelName}</div>`;
             }
             if (isLeader && agent.alive) {
                 badges += '<div class="status-badge leader">LEADER 🚀</div>';
