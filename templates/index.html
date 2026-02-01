@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Battleground | Strategy Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+    --bg-dark: #0a0e27;
+    --bg-card: #131a35;
+    --accent-cyan: #00d4ff;
+    --accent-magenta: #ff00e5;
+    --accent-yellow: #ffeb3b;
+    --text-primary: #ffffff;
+    --text-secondary: #a0a8c5;
+    --danger: #ff3366;
+    --success: #00ff88;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Rajdhani', sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+}
+
+/* Animated background */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        radial-gradient(circle at 20% 50%, rgba(0, 212, 255, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(255, 0, 229, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 40% 20%, rgba(255, 235, 59, 0.05) 0%, transparent 50%);
+    z-index: 0;
+    animation: bgPulse 10s ease-in-out infinite;
+}
+
+@keyframes bgPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.container {
+    position: relative;
+    z-index: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 40px 20px;
+}
+
+/* Header */
+.header {
+    text-align: center;
+    margin-bottom: 50px;
+    animation: slideDown 0.8s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 4rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta), var(--accent-yellow));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 10px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    animation: titleGlow 3s ease-in-out infinite;
+}
+
+@keyframes titleGlow {
+    0%, 100% { filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.5)); }
+    50% { filter: drop-shadow(0 0 40px rgba(255, 0, 229, 0.8)); }
+}
+
+.subtitle {
+    font-size: 1.2rem;
+    color: var(--text-secondary);
+    font-weight: 300;
+    letter-spacing: 2px;
+}
+
+/* Controls */
+.controls {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 40px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    animation: fadeIn 1s ease-out 0.3s backwards;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+input[type="number"] {
+    padding: 15px 20px;
+    font-size: 16px;
+    font-family: 'Rajdhani', sans-serif;
+    background: var(--bg-card);
+    border: 2px solid var(--accent-cyan);
+    border-radius: 8px;
+    color: var(--text-primary);
+    width: 200px;
+    transition: all 0.3s;
+}
+
+input[type="number"]:focus {
+    outline: none;
+    border-color: var(--accent-magenta);
+    box-shadow: 0 0 20px rgba(255, 0, 229, 0.3);
+}
+
+input[type="checkbox"] {
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    accent-color: var(--accent-cyan);
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+button {
+    padding: 15px 30px;
+    font-size: 16px;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+}
+
+button::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+button:hover::before {
+    width: 300px;
+    height: 300px;
+}
+
+button.start-btn {
+    background: linear-gradient(135deg, var(--accent-cyan), #0088cc);
+    color: white;
+}
+
+button.stop-btn {
+    background: linear-gradient(135deg, var(--danger), #cc0033);
+    color: white;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 212, 255, 0.4);
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Status */
+.status {
+    text-align: center;
+    padding: 20px;
+    margin-bottom: 30px;
+    border-radius: 12px;
+    font-size: 1.3rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+    animation: fadeIn 1s ease-out 0.5s backwards;
+}
+
+.status.running {
+    background: linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 212, 255, 0.2));
+    border: 2px solid var(--success);
+    color: var(--success);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.status.paused {
+    background: linear-gradient(135deg, rgba(255, 235, 59, 0.2), rgba(255, 152, 0, 0.2));
+    border: 2px solid var(--accent-yellow);
+    color: var(--accent-yellow);
+}
+
+.status.waiting {
+    background: linear-gradient(135deg, rgba(255, 0, 229, 0.2), rgba(255, 105, 180, 0.2));
+    border: 2px solid var(--accent-magenta);
+    color: var(--accent-magenta);
+    animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(0, 255, 136, 0.3); }
+    50% { box-shadow: 0 0 40px rgba(0, 255, 136, 0.6); }
+}
+
+/* Human Action Panel */
+.human-action-panel {
+    display: none;
+    background: var(--bg-card);
+    border: 3px solid var(--accent-magenta);
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 30px;
+    animation: slideDown 0.5s ease-out;
+}
+
+.human-action-panel.active {
+    display: block;
+}
+
+.action-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.8rem;
+    color: var(--accent-magenta);
+    margin-bottom: 20px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.action-buttons {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+}
+
+.action-btn {
+    padding: 20px;
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(0, 150, 200, 0.2));
+    border: 2px solid var(--accent-cyan);
+    color: var(--text-primary);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-transform: uppercase;
+}
+
+.action-btn:hover {
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.4), rgba(0, 150, 200, 0.4));
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px rgba(0, 212, 255, 0.5);
+}
+
+.action-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.action-cost {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 5px;
+}
+
+/* Game Panel */
+.game-panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 20px;
+    margin-bottom: 40px;
+    animation: fadeIn 1s ease-out 0.7s backwards;
+}
+
+.agent-card {
+    background: var(--bg-card);
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+    border: 2px solid transparent;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+}
+
+.agent-card.human {
+    border: 2px solid var(--accent-magenta);
+}
+
+.agent-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--accent-cyan), var(--accent-magenta));
+    transform: scaleX(0);
+    transition: transform 0.3s;
+}
+
+.agent-card:hover::before {
+    transform: scaleX(1);
+}
+
+.agent-card:hover {
+    border-color: var(--accent-cyan);
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+}
+
+.agent-card.dead {
+    background: rgba(19, 26, 53, 0.5);
+    opacity: 0.5;
+    border-color: var(--danger);
+}
+
+.agent-card.dead::before {
+    background: var(--danger);
+}
+
+.agent-name {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 15px;
+    color: var(--accent-cyan);
+}
+
+.agent-card.human .agent-name {
+    color: var(--accent-magenta);
+}
+
+.agent-card.dead .agent-name {
+    text-decoration: line-through;
+    color: var(--danger);
+}
+
+.agent-stats {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    line-height: 1.8;
+}
+
+.stat-value {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.status-badge {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+
+.status-badge.alive {
+    background: rgba(0, 255, 136, 0.2);
+    color: var(--success);
+}
+
+.status-badge.dead {
+    background: rgba(255, 51, 102, 0.2);
+    color: var(--danger);
+}
+
+.status-badge.human {
+    background: rgba(255, 0, 229, 0.2);
+    color: var(--accent-magenta);
+}
+
+/* Chat Container */
+.chat-section {
+    animation: fadeIn 1s ease-out 0.9s backwards;
+}
+
+.chat-header {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.5rem;
+    margin-bottom: 20px;
+    color: var(--accent-cyan);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.chat-container {
+    background: var(--bg-card);
+    border: 2px solid rgba(0, 212, 255, 0.3);
+    border-radius: 12px;
+    padding: 25px;
+    max-height: 500px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.chat-container::-webkit-scrollbar {
+    width: 10px;
+}
+
+.chat-container::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+}
+
+.chat-container::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, var(--accent-cyan), var(--accent-magenta));
+    border-radius: 10px;
+}
+
+.message {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border-left: 3px solid var(--accent-cyan);
+    animation: messageSlide 0.4s ease-out;
+}
+
+.message.human-msg {
+    border-left-color: var(--accent-magenta);
+    background: rgba(255, 0, 229, 0.1);
+}
+
+@keyframes messageSlide {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.speaker-name {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--accent-cyan);
+    font-family: 'Orbitron', sans-serif;
+}
+
+.speaker-name.human {
+    color: var(--accent-magenta);
+}
+
+.message-text {
+    color: var(--text-secondary);
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+.system-message {
+    text-align: center;
+    font-style: italic;
+    color: var(--accent-yellow);
+    padding: 10px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    animation: messageSlide 0.4s ease-out;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 2.5rem;
+    }
+    
+    .game-panel {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    }
+    
+    .action-buttons {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>AI Battleground</h1>
+        <p class="subtitle">Watch AI agents battle for supremacy - or join the fight yourself!</p>
+    </div>
+
+    <div class="status paused" id="status">Ready to Deploy Agents</div>
+
+    <div class="controls">
+        <input type="number" id="num_agents" placeholder="Number of agents" value="10" min="2" max="10">
+        <label class="checkbox-label">
+            <input type="checkbox" id="include_human">
+            Play as Agent1
+        </label>
+        <button class="start-btn" onclick="startGame()">Launch Battle</button>
+        <button class="stop-btn" onclick="stopGame()">Emergency Stop</button>
+    </div>
+
+    <!-- Human Action Panel -->
+    <div class="human-action-panel" id="humanActionPanel">
+        <div class="action-title">🎮 Your Turn - Choose Action</div>
+        <div class="action-buttons">
+            <button class="action-btn" onclick="submitAction('Produce')">
+                Produce
+                <span class="action-cost">+2 Resources</span>
+            </button>
+            <button class="action-btn" onclick="submitAction('Influence')">
+                Influence
+                <span class="action-cost">+1 Influence</span>
+            </button>
+            <button class="action-btn" id="invadeBtn" onclick="submitAction('Invade')">
+                Invade
+                <span class="action-cost">-1 Influence</span>
+            </button>
+            <button class="action-btn" id="propagandizeBtn" onclick="submitAction('Propagandize')">
+                Propagandize
+                <span class="action-cost">-1 Resource</span>
+            </button>
+            <button class="action-btn" id="nukeBtn" onclick="submitAction('Nuke')">
+                Nuke
+                <span class="action-cost">-8 Resources</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="game-panel" id="agents-panel"></div>
+    
+    <div class="chat-section">
+        <div class="chat-header">Battle Log</div>
+        <div class="chat-container" id="chat"></div>
+    </div>
+</div>
+
+<script>
+let updateInterval;
+let lastMessageCount = 0;
+let humanPlayerName = null;
+
+function startGame() {
+    const num_agents = document.getElementById('num_agents').value || 10;
+    const include_human = document.getElementById('include_human').checked;
+    
+    fetch('http://localhost:5001/api/start', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({num_agents, include_human})
+    })
+    .then(r => r.json())
+    .then(data => {
+        humanPlayerName = data.human_name;
+        document.getElementById('chat').innerHTML = '';
+        lastMessageCount = 0;
+        updateInterval = setInterval(updateGame, 500);
+    })
+    .catch(err => {
+        console.error('Error starting game:', err);
+        alert('Failed to start game. Make sure the Flask server is running on port 5001.');
+    });
+}
+
+function stopGame() {
+    fetch('http://localhost:5001/api/stop', {method: 'POST'})
+    .then(() => {
+        clearInterval(updateInterval);
+        document.getElementById('humanActionPanel').classList.remove('active');
+    })
+    .catch(err => console.error('Error stopping game:', err));
+}
+
+function submitAction(action) {
+    fetch('http://localhost:5001/api/human_action', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action})
+    })
+    .then(r => r.json())
+    .then(data => {
+        console.log('Action submitted:', data);
+        document.getElementById('humanActionPanel').classList.remove('active');
+    })
+    .catch(err => console.error('Error submitting action:', err));
+}
+
+function updateActionButtons(myStats) {
+    // Enable/disable buttons based on resources
+    document.getElementById('invadeBtn').disabled = myStats.influence < 1;
+    document.getElementById('propagandizeBtn').disabled = myStats.resources < 1;
+    document.getElementById('nukeBtn').disabled = myStats.resources < 8;
+}
+
+function updateGame() {
+    fetch('http://localhost:5001/api/game_state')
+    .then(r => r.json())
+    .then(data => {
+        const statusDiv = document.getElementById('status');
+        
+        if (data.waiting_for_human) {
+            statusDiv.textContent = `⏳ Turn ${data.turn}/${data.max_turns} - Waiting for ${data.human_player} to act...`;
+            statusDiv.className = 'status waiting';
+            
+            // Show human action panel
+            document.getElementById('humanActionPanel').classList.add('active');
+            
+            // Update button states
+            if (data.agents[data.human_player]) {
+                updateActionButtons(data.agents[data.human_player]);
+            }
+        } else if (data.running) {
+            statusDiv.textContent = `Turn ${data.turn}/${data.max_turns} - Battle in Progress`;
+            statusDiv.className = 'status running';
+            document.getElementById('humanActionPanel').classList.remove('active');
+        } else {
+            statusDiv.textContent = 'Battle Paused';
+            statusDiv.className = 'status paused';
+            document.getElementById('humanActionPanel').classList.remove('active');
+        }
+
+        // Update agent stats
+        const panel = document.getElementById('agents-panel');
+        panel.innerHTML = '';
+        for (const name in data.agents) {
+            const agent = data.agents[name];
+            const isHuman = name === data.human_player;
+            const card = document.createElement('div');
+            card.className = 'agent-card' + (agent.alive ? '' : ' dead') + (isHuman ? ' human' : '');
+            card.innerHTML = `
+                <div class="agent-name ${isHuman ? 'human' : ''}">${name}${isHuman ? ' 🎮' : ''}</div>
+                <div class="agent-stats">
+                    Resources: <span class="stat-value">${agent.resources}</span><br>
+                    Influence: <span class="stat-value">${agent.influence}</span>
+                </div>
+                <div class="status-badge ${agent.alive ? 'alive' : 'dead'} ${isHuman ? 'human' : ''}">
+                    ${isHuman ? 'HUMAN' : agent.alive ? 'ACTIVE' : 'ELIMINATED'}
+                </div>
+            `;
+            panel.appendChild(card);
+        }
+
+        // Update chat
+        fetch('http://localhost:5001/api/conversation')
+        .then(r => r.json())
+        .then(convData => {
+            const chatDiv = document.getElementById('chat');
+            if (convData.conversation.length > lastMessageCount) {
+                for (let i = lastMessageCount; i < convData.conversation.length; i++) {
+                    const msg = convData.conversation[i];
+                    const msgDiv = document.createElement('div');
+                    if (msg.speaker === 'System') {
+                        msgDiv.className = 'system-message';
+                        msgDiv.textContent = msg.message;
+                    } else {
+                        const isHuman = msg.speaker === humanPlayerName;
+                        msgDiv.className = 'message' + (isHuman ? ' human-msg' : '');
+                        msgDiv.innerHTML = `
+                            <div class="speaker-name ${isHuman ? 'human' : ''}">${msg.speaker}${isHuman ? ' 🎮' : ''}</div>
+                            <div class="message-text">${msg.message}</div>
+                        `;
+                    }
+                    chatDiv.appendChild(msgDiv);
+                }
+                lastMessageCount = convData.conversation.length;
+                chatDiv.scrollTop = chatDiv.scrollHeight;
+            }
+        });
+
+        if (!data.running) clearInterval(updateInterval);
+    })
+    .catch(err => console.error('Error updating game:', err));
+}
+</script>
+</body>
+</html>

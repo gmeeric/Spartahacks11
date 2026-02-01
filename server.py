@@ -102,7 +102,10 @@ game_session = {
     "agents": {},          # ChatAgent objects
     "conversation": [],    # List of messages
     "game_state": {},      # Turn, max_turns, agent resources
-    "running": False
+    "running": False,
+    "human_player": None,  # Name of human player (if any)
+    "waiting_for_human": False,  # Is game paused for human input?
+    "human_action": None   # Action chosen by human
 }
 
 # ------------------- Helper -------------------
@@ -225,7 +228,7 @@ def apply_action(name, action, state):
 
 # ------------------- Game Loop -------------------
 
-def run_game(num_agents):
+def run_game(num_agents, has_human):
     """Main game loop that runs in a separate thread"""
     agents = list(game_session["agents"].values())
     agent_names = list(game_session["agents"].keys())
@@ -234,11 +237,20 @@ def run_game(num_agents):
 
     last_seen_index = {name: 0 for name in agent_names}
 
+    human_name = game_session["human_player"]
+    
     conversation.append({
         "speaker": "System",
         "message": f"=== BATTLE COMMENCED: {num_agents} AGENTS DEPLOYED ===",
         "time": time.time()
     })
+    
+    if has_human:
+        conversation.append({
+            "speaker": "System",
+            "message": f"🎮 HUMAN PLAYER: {human_name} has joined the battle!",
+            "time": time.time()
+        })
 
     while game_session["running"] and state["turn"] <= state["max_turns"]:
         alive_agents = [name for name in agent_names if state["agents"][name]["alive"]]
@@ -247,9 +259,10 @@ def run_game(num_agents):
         if len(alive_agents) <= 1:
             if len(alive_agents) == 1:
                 winner = alive_agents[0]
+                winner_type = "HUMAN" if winner == human_name else "AI"
                 conversation.append({
                     "speaker": "System",
-                    "message": f"🏆 VICTORY: {winner} is the last agent standing!",
+                    "message": f"🏆 VICTORY: {winner} ({winner_type}) is the last agent standing!",
                     "time": time.time()
                 })
             else:
@@ -270,64 +283,112 @@ def run_game(num_agents):
             if not state["agents"][name]["alive"]:
                 continue
             
-            agent = game_session["agents"][name]
-
-            # Build state summary for AI
-            def build_state_summary(include_error=None):
-                new_messages = conversation[last_seen_index[name]:]
-                state_summary = f"Turn {state['turn']}\n\n"
-                state_summary += "Current Status:\n"
-                for n, info in state["agents"].items():
-                    alive_text = "Alive" if info["alive"] else "Dead"
-                    state_summary += f"  {n}: resources={info['resources']}, influence={info['influence']}, {alive_text}\n"
+            # Check if this is the human player
+            if name == human_name:
+                # Wait for human input
+                game_session["waiting_for_human"] = True
+                game_session["human_action"] = None
                 
-                if include_error:
-                    state_summary += f"\n⚠️ INVALID ACTION: {include_error}\n"
-                    state_summary += "You must choose a different action that you can afford.\n\n"
+                conversation.append({
+                    "speaker": "System",
+                    "message": f"⏳ Waiting for {human_name} to choose an action...",
+                    "time": time.time()
+                })
                 
-                if new_messages:
-                    state_summary += "\nRecent actions:\n"
-                    for msg in new_messages[-5:]:  # Last 5 messages
-                        state_summary += f"  {msg['speaker']}: {msg['message']}\n"
+                # Wait until human makes a choice
+                timeout = 60  # 60 second timeout
+                waited = 0
+                while game_session["human_action"] is None and waited < timeout:
+                    time.sleep(0.5)
+                    waited += 0.5
                 
-                return state_summary
-
-            # Try to get a valid action (with retries)
-            max_retries = 3
-            chosen_action = None
-            explanation = None
-            
-            for attempt in range(max_retries):
-                try:
-                    # Build state summary (with error message if retrying)
-                    if attempt == 0:
-                        state_summary = build_state_summary()
-                    else:
-                        state_summary = build_state_summary(include_error=error_message)
-                    
-                    result = agent.respond(state_summary)
-                    chosen_action = result["action"]
-                    explanation = result["explanation"]
-                    
-                    # Check if action is valid
-                    can_perform, error_message = can_perform_action(name, chosen_action, state)
-                    
-                    if can_perform:
-                        print(f"✓ {name} chose: {chosen_action} - {explanation}")
-                        break
-                    else:
-                        print(f"⚠ {name} tried {chosen_action} but: {error_message}. Retry {attempt + 1}/{max_retries}")
-                        if attempt == max_retries - 1:
-                            # Last retry failed, force Produce
-                            print(f"✗ {name} failed all retries, forcing Produce")
-                            chosen_action = "Produce"
-                            explanation = "Forced to produce after invalid action attempts"
+                game_session["waiting_for_human"] = False
                 
-                except Exception as e:
-                    print(f"✗ Error getting response from {name}: {e}")
+                if game_session["human_action"] is None:
+                    # Timeout - auto produce
                     chosen_action = "Produce"
-                    explanation = "Error occurred, defaulting to Produce"
-                    break
+                    explanation = "Timeout - auto produced"
+                    conversation.append({
+                        "speaker": "System",
+                        "message": f"⏰ {human_name} timed out - auto Produce",
+                        "time": time.time()
+                    })
+                else:
+                    chosen_action = game_session["human_action"]
+                    explanation = "Human choice"
+                
+                # Validate action
+                can_perform, error_message = can_perform_action(name, chosen_action, state)
+                if not can_perform:
+                    # Force to Produce if invalid
+                    conversation.append({
+                        "speaker": "System",
+                        "message": f"❌ Invalid action: {error_message}. Auto Produce instead.",
+                        "time": time.time()
+                    })
+                    chosen_action = "Produce"
+                    explanation = "Invalid action - auto produced"
+                
+            else:
+                # AI agent
+                agent = game_session["agents"][name]
+
+                # Build state summary for AI
+                def build_state_summary(include_error=None):
+                    new_messages = conversation[last_seen_index[name]:]
+                    state_summary = f"Turn {state['turn']}\n\n"
+                    state_summary += "Current Status:\n"
+                    for n, info in state["agents"].items():
+                        alive_text = "Alive" if info["alive"] else "Dead"
+                        state_summary += f"  {n}: resources={info['resources']}, influence={info['influence']}, {alive_text}\n"
+                    
+                    if include_error:
+                        state_summary += f"\n⚠️ INVALID ACTION: {include_error}\n"
+                        state_summary += "You must choose a different action that you can afford.\n\n"
+                    
+                    if new_messages:
+                        state_summary += "\nRecent actions:\n"
+                        for msg in new_messages[-5:]:  # Last 5 messages
+                            state_summary += f"  {msg['speaker']}: {msg['message']}\n"
+                    
+                    return state_summary
+
+                # Try to get a valid action (with retries)
+                max_retries = 3
+                chosen_action = None
+                explanation = None
+                
+                for attempt in range(max_retries):
+                    try:
+                        # Build state summary (with error message if retrying)
+                        if attempt == 0:
+                            state_summary = build_state_summary()
+                        else:
+                            state_summary = build_state_summary(include_error=error_message)
+                        
+                        result = agent.respond(state_summary)
+                        chosen_action = result["action"]
+                        explanation = result["explanation"]
+                        
+                        # Check if action is valid
+                        can_perform, error_message = can_perform_action(name, chosen_action, state)
+                        
+                        if can_perform:
+                            print(f"✓ {name} chose: {chosen_action} - {explanation}")
+                            break
+                        else:
+                            print(f"⚠ {name} tried {chosen_action} but: {error_message}. Retry {attempt + 1}/{max_retries}")
+                            if attempt == max_retries - 1:
+                                # Last retry failed, force Produce
+                                print(f"✗ {name} failed all retries, forcing Produce")
+                                chosen_action = "Produce"
+                                explanation = "Forced to produce after invalid action attempts"
+                    
+                    except Exception as e:
+                        print(f"✗ Error getting response from {name}: {e}")
+                        chosen_action = "Produce"
+                        explanation = "Error occurred, defaulting to Produce"
+                        break
 
             # Apply action (we know it's valid now)
             action_result = apply_action(name, chosen_action, state)
@@ -352,6 +413,7 @@ def run_game(num_agents):
         state["turn"] += 1
 
     game_session["running"] = False
+    game_session["waiting_for_human"] = False
     conversation.append({
         "speaker": "System",
         "message": "=== BATTLE CONCLUDED ===",
@@ -371,6 +433,7 @@ def start_game_route():
     try:
         data = request.json
         num_agents = int(data.get("num_agents", 10))
+        include_human = data.get("include_human", False)
         
         if num_agents < 2 or num_agents > 10:
             return jsonify({"error": "Number of agents must be between 2 and 10"}), 400
@@ -382,6 +445,9 @@ def start_game_route():
         # Reset session
         game_session["conversation"] = []
         game_session["agents"] = {}
+        game_session["human_player"] = None
+        game_session["waiting_for_human"] = False
+        game_session["human_action"] = None
         game_session["game_state"] = {
             "turn": 1,
             "max_turns": 30,
@@ -389,9 +455,22 @@ def start_game_route():
         }
 
         # Create agents
-        for i in range(num_agents):
-            name = f"Agent{i+1}"
-            personality = PERSONALITIES[i % len(PERSONALITIES)]
+        agent_start = 1
+        if include_human:
+            # Human player is Agent1
+            name = "Agent1"
+            game_session["human_player"] = name
+            game_session["game_state"]["agents"][name] = {
+                "resources": 0,
+                "influence": 0,
+                "alive": True
+            }
+            agent_start = 2
+            print(f"✓ Created {name} as HUMAN PLAYER")
+        
+        for i in range(agent_start, num_agents + 1):
+            name = f"Agent{i}"
+            personality = PERSONALITIES[(i-1) % len(PERSONALITIES)]
             
             try:
                 game_session["agents"][name] = ChatAgent(
@@ -411,14 +490,16 @@ def start_game_route():
             }
 
         game_session["running"] = True
-        threading.Thread(target=run_game, args=(num_agents,), daemon=True).start()
+        threading.Thread(target=run_game, args=(num_agents, include_human), daemon=True).start()
 
         ai_type = "Real Groq AI" if USE_REAL_AI else "Mock AI (for testing)"
-        print(f"✓ Game started with {num_agents} agents using {ai_type}")
+        print(f"✓ Game started with {num_agents} agents (human: {include_human}) using {ai_type}")
         
         return jsonify({
             "status": "Game started!", 
             "num_agents": num_agents,
+            "has_human": include_human,
+            "human_name": game_session["human_player"],
             "ai_type": ai_type
         })
     
@@ -443,8 +524,32 @@ def get_game_state():
         "agents": agents_state,
         "turn": state.get("turn", 1),
         "max_turns": state.get("max_turns", 30),
-        "running": game_session.get("running", False)
+        "running": game_session.get("running", False),
+        "waiting_for_human": game_session.get("waiting_for_human", False),
+        "human_player": game_session.get("human_player", None)
     })
+
+@app.route('/api/human_action', methods=['POST'])
+def submit_human_action():
+    """Submit human player's action"""
+    try:
+        data = request.json
+        action = data.get("action")
+        
+        if action not in ["Produce", "Influence", "Invade", "Propagandize", "Nuke"]:
+            return jsonify({"error": "Invalid action"}), 400
+        
+        if not game_session.get("waiting_for_human", False):
+            return jsonify({"error": "Not waiting for human input"}), 400
+        
+        game_session["human_action"] = action
+        print(f"✓ Human chose: {action}")
+        
+        return jsonify({"status": "Action submitted", "action": action})
+    
+    except Exception as e:
+        print(f"✗ Error submitting human action: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/stop', methods=['POST'])
 def stop_game():
