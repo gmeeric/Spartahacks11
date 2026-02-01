@@ -17,10 +17,13 @@ class ChatAgent:
 PERSONA & CHARACTER: {self.personality}
 CRITICAL: You must speak and reason ENTIRELY in character! Use vocabulary, phrases, and tone that match your persona.
 
-CRITICAL WIN CONDITION:
-- You ONLY win if you are the LAST agent alive
-- Multiple survivors = everyone loses
-- You MUST eliminate all opponents to win
+CRITICAL WIN CONDITION - THE ROCKET ESCAPE:
+- There is a ROCKET that can only fit a LIMITED number of seats
+- The number of seats depends on how much the PROJECT has accumulated (shared pool of resources)
+- You WIN if you are ALIVE when the number of alive agents <= available seats
+- This means you DON'T need to be the last one alive - multiple agents can win!
+- BUT seats are limited (max = starting agents - 1), so you still need to eliminate some opponents
+- Strategy: Balance contributing to increase seats vs eliminating opponents to reduce competition
 
 GAME MECHANICS:
 1. Produce: +2 resources (safe accumulation)
@@ -28,6 +31,13 @@ GAME MECHANICS:
 3. Invade: Cost 1 influence → Steal 2 resources from chosen opponent with resources
 4. Propagandize: Cost 1 resource → Steal 1 influence from chosen opponent with influence
 5. Nuke: Cost 8 resources → PERMANENTLY ELIMINATE chosen opponent
+
+THE PROJECT (Shared Resource Pool):
+- All agents can contribute resources to THE PROJECT each turn
+- Total project resources determine how many ROCKET SEATS are available
+- More resources = more seats = easier for everyone to win
+- The agent who contributes MOST each round becomes LEADER (+1 influence, goes first)
+- This creates a dilemma: help everyone by contributing, or save resources for attacks?
 
 ROLEPLAYING GUIDELINES - EXTREMELY IMPORTANT:
 Your "reasoning" field MUST be written completely in character!
@@ -49,18 +59,22 @@ STRATEGIC PRINCIPLES (adapt to your persona):
 - Build resources in a way your persona would
 - Target opponents your character would dislike
 - Express strategy in your unique voice
+- Consider the SEATS - do you need to eliminate more, or can you cooperate?
 
 TARGET SELECTION:
 - When using Invade/Propagandize/Nuke, you MUST specify a target
 - Choose targets strategically based on threat level
 - Target high-resource opponents before they nuke you
 - Consider who attacked you (revenge)
+- Think about the seat count - eliminate threats, not random opponents
 
 DECISION FRAMEWORK:
-1. Can I nuke someone NOW? (I have 8+ resources) → Target biggest threat!
-2. Can I invade to steal resources? (I have influence) → Target richest opponent!
-3. Is someone close to nuking ME? (they have 6+ resources) → Invade them!
-4. Am I falling behind? → Get aggressive
+1. Check the seats situation: alive agents vs available seats
+2. If alive > seats: Need to eliminate opponents OR increase project total
+3. If alive <= seats: Focus on survival, avoid being nuked
+4. Can I nuke someone NOW? (I have 8+ resources) → Target biggest threat!
+5. Can I invade to steal resources? (I have influence) → Target richest opponent!
+6. Is someone close to nuking ME? (they have 6+ resources) → Invade them!
 
 RESPONSE FORMAT - You must respond with valid JSON:
 {{
@@ -81,18 +95,25 @@ Example responses showing CHARACTER:
 PERSONA & CHARACTER: {self.personality}
 CRITICAL: Stay in character when making your decision!
 
-THE PROJECT:
+THE PROJECT & ROCKET SEATS:
 - A shared pool where all agents can contribute resources
-- Total contributions accumulate (never decrease)
+- Total contributions determine how many ROCKET SEATS are available
+- More seats = more agents can escape and win together
 - The agent who contributes MOST this round becomes the LEADER
 - The LEADER gets +1 influence and goes first next turn
 - This is a strategic decision - balance investing vs keeping resources for nukes/actions
+
+WIN CONDITION:
+- You win if you're ALIVE when alive agents <= available seats
+- So contributing helps EVERYONE (including you), but costs your attack resources
+- Consider: Are there too many opponents for current seats? Should you save resources to nuke someone?
+- Or are seats close to enough? Should you contribute to help everyone escape?
 
 CONTRIBUTION DECISION:
 - You can contribute 0 or more resources (up to what you have)
 - Contributing more = better chance to be leader
 - But you need 8 resources to nuke opponents
-- Consider: Do you want leadership? Can you afford to give up resources?
+- Think about seat math: Do we need more seats or fewer opponents?
 
 RESPONSE FORMAT - You must respond with valid JSON:
 {{

@@ -49,9 +49,37 @@ game_session = {
     "human_player": None,  # Name of human player (if any)
     "waiting_for_human": False,  # Is game paused for human input?
     "human_action": None,   # Action chosen by human
+    "human_target": None,   # Target chosen by human
     "waiting_for_contribution": False,  # Is game paused for contribution input?
-    "human_contribution": None  # Contribution amount chosen by human
+    "human_contribution": None,  # Contribution amount chosen by human
+    "num_starting_agents": 0  # Track starting number of agents
 }
+
+# Seats thresholds for the rocket project
+SEATS_THRESHOLDS = [
+    (0, 0),      # 0-29 resources = 0 seats
+    (30, 1),     # 30-39 resources = 1 seat
+    (40, 2),     # 40-49 resources = 2 seats
+    (50, 3),     # 50-59 resources = 3 seats
+    (60, 4),     # 60-69 resources = 4 seats
+    (70, 5),     # 70-79 resources = 5 seats
+    (80, 6),     # 80-89 resources = 6 seats
+    (90, 7),     # 90-99 resources = 7 seats
+    (100, 8),    # 100+ resources = 8 seats
+]
+
+def calculate_available_seats(project_total, num_starting_agents):
+    """Calculate how many seats are available based on project total"""
+    seats = 0
+    for threshold, seat_count in SEATS_THRESHOLDS:
+        if project_total >= threshold:
+            seats = seat_count
+        else:
+            break
+    
+    # Cap at number of starting agents - 1 (not everyone can win initially)
+    max_seats = max(0, num_starting_agents - 1)
+    return min(seats, max_seats)
 
 # ------------------- Helper Functions -------------------
 
@@ -198,8 +226,18 @@ def apply_action(name, action, target, state):
 def build_strategic_prompt(name, state, conversation, last_seen_index, include_error=None):
     """Build a detailed strategic prompt for the AI agent"""
     agents_state = state["agents"]
+    alive_count = len([n for n, s in agents_state.items() if s["alive"]])
+    available_seats = state.get("available_seats", 0)
+    num_starting = state.get("num_starting_agents", alive_count)
     
     prompt = f"=== TURN {state['turn']} STRATEGIC ANALYSIS ===\n\n"
+    
+    # Seats information
+    prompt += f"🚀 ROCKET PROJECT STATUS:\n"
+    prompt += f"  Total Resources: {state['project_total']}\n"
+    prompt += f"  Available Seats: {available_seats} (max {num_starting - 1})\n"
+    prompt += f"  Alive Agents: {alive_count}\n"
+    prompt += f"  WIN CONDITION: Get alive agents to {available_seats} or fewer!\n\n"
     
     # Your current status
     my_stats = agents_state[name]
@@ -284,10 +322,20 @@ def build_strategic_prompt(name, state, conversation, last_seen_index, include_e
         prompt += f"💡 You have {my_stats['influence']} influence - enough to INVADE multiple times!\n"
         prompt += "Invasions steal resources efficiently. Consider attacking!\n"
     
+    # Seats-based strategy
+    agents_to_eliminate = alive_count - available_seats
+    if agents_to_eliminate > 0:
+        prompt += f"\n🎯 CRITICAL: Need to eliminate {agents_to_eliminate} more agent(s) to win!\n"
+        prompt += f"Current: {alive_count} alive, Seats: {available_seats}\n"
+        prompt += f"Strategy: Focus on eliminating threats or building resources to nuke!\n"
+    else:
+        prompt += f"\n🏆 VICTORY POSSIBLE! Only {alive_count} agents alive, {available_seats} seats available!\n"
+        prompt += f"You and {len(alive_opponents)} other(s) can all escape if you survive this turn!\n"
+    
     prompt += "\n=== YOUR DECISION ===\n"
     prompt += "Make a decision that matches YOUR PERSONALITY.\n"
     prompt += "Don't just copy what others are doing - play to your character!\n"
-    prompt += "Remember: You must be the LAST agent alive to win!\n"
+    prompt += f"Remember: Reduce alive agents to {available_seats} or fewer to escape on the rocket!\n"
     
     return prompt
 
@@ -295,6 +343,9 @@ def build_contribution_prompt(name, state, round_contributions):
     """Build prompt for project contribution decision"""
     agents_state = state["agents"]
     my_stats = agents_state[name]
+    alive_count = len([n for n, s in agents_state.items() if s["alive"]])
+    current_seats = state.get("available_seats", 0)
+    num_starting = state.get("num_starting_agents", alive_count)
     
     prompt = f"=== PROJECT CONTRIBUTION DECISION ===\n\n"
     prompt += f"YOUR CURRENT STATUS ({name}):\n"
@@ -303,7 +354,21 @@ def build_contribution_prompt(name, state, round_contributions):
     
     prompt += f"THE PROJECT:\n"
     prompt += f"  Total Contributions So Far: {state['project_total']} resources\n"
-    prompt += f"  Current Round Leader: {state.get('project_leader', 'None')}\n\n"
+    prompt += f"  Current Seats: {current_seats} (max {num_starting - 1})\n"
+    prompt += f"  Alive Agents: {alive_count}\n"
+    prompt += f"  Current Round Leader: {state.get('project_leader', 'None')}\n"
+    
+    # Show next seat thresholds
+    next_threshold = None
+    for threshold, seats in SEATS_THRESHOLDS:
+        if state['project_total'] < threshold:
+            next_threshold = (threshold, seats)
+            break
+    
+    if next_threshold and next_threshold[1] < num_starting - 1:
+        prompt += f"  Next milestone: {next_threshold[0]} resources = {next_threshold[1]} seats\n"
+    
+    prompt += "\n"
     
     if round_contributions:
         prompt += "CONTRIBUTIONS THIS ROUND SO FAR:\n"
@@ -318,7 +383,9 @@ def build_contribution_prompt(name, state, round_contributions):
     prompt += f"\nREMINDER:\n"
     prompt += f"- Contributing the MOST this round gives you +1 influence and first action next turn\n"
     prompt += f"- You need 8 resources to nuke someone\n"
-    prompt += f"- Consider your strategy: invest in leadership or save for attacks?\n"
+    prompt += f"- More project resources = more seats = easier for everyone to win!\n"
+    prompt += f"- Agents need to reduce to {current_seats} or fewer to escape\n"
+    prompt += f"- Consider your strategy: invest in seats or save for attacks?\n"
     
     prompt += f"\nHow many resources do you want to contribute? (0 to {my_stats['resources']})\n"
     
@@ -360,24 +427,13 @@ def run_game(num_agents, has_human):
     while game_session["running"] and state["turn"] <= state["max_turns"]:
         alive_agents = [name for name in agent_names if state["agents"][name]["alive"]]
         
-        # Check win condition
-        if len(alive_agents) <= 1:
-            if len(alive_agents) == 1:
-                winner = alive_agents[0]
-                winner_type = "HUMAN" if winner == human_name else "AI"
-                conversation.append({
-                    "speaker": "System",
-                    "message": f"🏆 VICTORY: {winner} ({winner_type}) is the last agent standing!",
-                    "time": time.time()
-                })
-            else:
-                conversation.append({
-                    "speaker": "System",
-                    "message": "⚔️ ALL AGENTS ELIMINATED - No winner!",
-                    "time": time.time()
-                })
-            break
-
+        # Calculate available seats based on project total and starting agents
+        available_seats = calculate_available_seats(state["project_total"], state["num_starting_agents"])
+        state["available_seats"] = available_seats
+        
+        # Check win condition: alive agents <= available seats at START of contribution phase
+        # This check happens before the action phase, so it's based on previous turn's state
+        
         conversation.append({
             "speaker": "System",
             "message": f"--- Turn {state['turn']} ---",
@@ -398,6 +454,7 @@ def run_game(num_agents, has_human):
                 # Wait for human input
                 game_session["waiting_for_human"] = True
                 game_session["human_action"] = None
+                game_session["human_target"] = None
                 
                 conversation.append({
                     "speaker": "System",
@@ -406,7 +463,7 @@ def run_game(num_agents, has_human):
                 })
                 
                 # Wait until human makes a choice
-                timeout = 60  # 60 second timeout
+                timeout = 30  # 30 second timeout
                 waited = 0
                 while game_session["human_action"] is None and waited < timeout:
                     time.sleep(0.5)
@@ -426,8 +483,8 @@ def run_game(num_agents, has_human):
                     })
                 else:
                     chosen_action = game_session["human_action"]
+                    chosen_target = game_session["human_target"]  # Use the target from frontend
                     explanation = "Human choice"
-                    chosen_target = None  # Humans don't specify targets (random for now)
                 
                 # Validate action
                 can_perform, error_message = can_perform_action(name, chosen_action, state)
@@ -530,9 +587,9 @@ def run_game(num_agents, has_human):
 
             # Delay between agents to avoid rate limits
             if name != agent_names[-1] or not state["agents"][agent_names[-1]]["alive"]:
-                time.sleep(3)  # 3 second pause between agents
+                time.sleep(1)  # 1 second pause between agents
             else:
-                time.sleep(3)  # 3 second pause before contribution phase
+                time.sleep(1)  # 1 second pause before contribution phase
 
         # PROJECT CONTRIBUTION PHASE
         conversation.append({
@@ -540,6 +597,40 @@ def run_game(num_agents, has_human):
             "message": f"🚀 PROJECT CONTRIBUTION PHASE - Turn {state['turn']}",
             "time": time.time()
         })
+        
+        # Re-check alive agents before contribution phase
+        alive_agents = [name for name in agent_names if state["agents"][name]["alive"]]
+        
+        # Update available seats
+        available_seats = calculate_available_seats(state["project_total"], state["num_starting_agents"])
+        state["available_seats"] = available_seats
+        
+        # Check win condition at START of contribution phase
+        if len(alive_agents) <= available_seats:
+            if len(alive_agents) > 0:
+                winners = alive_agents
+                conversation.append({
+                    "speaker": "System",
+                    "message": f"🚀 ROCKET LAUNCH! {len(winners)} agent(s) escape to victory!",
+                    "time": time.time()
+                })
+                conversation.append({
+                    "speaker": "System",
+                    "message": f"🏆 WINNERS: {', '.join(winners)}",
+                    "time": time.time()
+                })
+                conversation.append({
+                    "speaker": "System",
+                    "message": f"📊 Final Project Total: {state['project_total']} resources ({available_seats} seats available)",
+                    "time": time.time()
+                })
+            else:
+                conversation.append({
+                    "speaker": "System",
+                    "message": "⚔️ ALL AGENTS ELIMINATED - No survivors!",
+                    "time": time.time()
+                })
+            break
         
         round_contributions = {}
         
@@ -562,7 +653,7 @@ def run_game(num_agents, has_human):
                     "time": time.time()
                 })
                 
-                timeout = 60
+                timeout = 30
                 waited = 0
                 while game_session["human_contribution"] is None and waited < timeout:
                     time.sleep(0.5)
@@ -621,7 +712,7 @@ def run_game(num_agents, has_human):
                 "time": time.time()
             })
             
-            time.sleep(2)  # 2 second pause between contribution decisions
+            time.sleep(1)  # 1 second pause between contribution decisions
         
         # Determine round leader (highest contributor)
         if round_contributions:
@@ -647,14 +738,18 @@ def run_game(num_agents, has_human):
                         "time": time.time()
                     })
         
+        # Update available seats based on new project total
+        alive_count = len([name for name in agent_names if state["agents"][name]["alive"]])
+        state["available_seats"] = calculate_available_seats(state["project_total"], state["num_starting_agents"])
+        
         conversation.append({
             "speaker": "System",
-            "message": f"📊 Project Total: {state['project_total']} resources",
+            "message": f"📊 Project Total: {state['project_total']} resources | 🚀 Available Seats: {state['available_seats']}/{alive_count} agents",
             "time": time.time()
         })
 
         state["turn"] += 1
-        time.sleep(2)  # Pause before next turn
+        time.sleep(1)  # Pause before next turn
 
     game_session["running"] = False
     game_session["waiting_for_human"] = False
@@ -693,14 +788,18 @@ def start_game_route():
         game_session["human_player"] = None
         game_session["waiting_for_human"] = False
         game_session["human_action"] = None
+        game_session["human_target"] = None
         game_session["waiting_for_contribution"] = False
         game_session["human_contribution"] = None
+        game_session["num_starting_agents"] = num_agents
         game_session["game_state"] = {
             "turn": 1,
             "max_turns": 30,
             "agents": {},
             "project_total": 0,
-            "project_leader": None
+            "project_leader": None,
+            "available_seats": 0,
+            "num_starting_agents": num_agents
         }
 
         # Create agents
@@ -778,7 +877,9 @@ def get_game_state():
         "waiting_for_contribution": game_session.get("waiting_for_contribution", False),
         "human_player": game_session.get("human_player", None),
         "project_total": state.get("project_total", 0),
-        "project_leader": state.get("project_leader", None)
+        "project_leader": state.get("project_leader", None),
+        "available_seats": state.get("available_seats", 0),
+        "num_starting_agents": state.get("num_starting_agents", 0)
     })
 
 @app.route('/api/human_action', methods=['POST'])
@@ -787,6 +888,7 @@ def submit_human_action():
     try:
         data = request.json
         action = data.get("action")
+        target = data.get("target", None)
         
         if action not in ["Produce", "Influence", "Invade", "Propagandize", "Nuke"]:
             return jsonify({"error": "Invalid action"}), 400
@@ -794,10 +896,12 @@ def submit_human_action():
         if not game_session.get("waiting_for_human", False):
             return jsonify({"error": "Not waiting for human input"}), 400
         
+        # Store both action and target
         game_session["human_action"] = action
-        print(f"✓ Human chose: {action}")
+        game_session["human_target"] = target
+        print(f"✓ Human chose: {action}" + (f" targeting {target}" if target else ""))
         
-        return jsonify({"status": "Action submitted", "action": action})
+        return jsonify({"status": "Action submitted", "action": action, "target": target})
     
     except Exception as e:
         print(f"✗ Error submitting human action: {e}")
@@ -838,6 +942,7 @@ if __name__ == '__main__':
     print("✓ Using Real Groq AI")
     print(f"✓ API Key Rotation: {len(API_KEYS)} key(s)")
     print("✓ Project/Rocket System Enabled")
+    print("✓ Seats system: max = (starting agents - 1)")
     print("="*50 + "\n")
     
     app.run(debug=True, port=5001, threaded=True)

@@ -364,6 +364,80 @@ button:disabled {
     margin-top: 5px;
 }
 
+/* Target Selection */
+.target-selection {
+    margin-bottom: 25px;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    border: 2px solid rgba(0, 212, 255, 0.3);
+}
+
+.target-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.1rem;
+    color: var(--accent-cyan);
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.target-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 15px;
+}
+
+.target-btn {
+    padding: 12px 20px;
+    background: rgba(0, 212, 255, 0.1);
+    border: 2px solid rgba(0, 212, 255, 0.3);
+    color: var(--text-primary);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.target-btn:hover {
+    background: rgba(0, 212, 255, 0.2);
+    border-color: var(--accent-cyan);
+    transform: translateY(-2px);
+}
+
+.target-btn.selected {
+    background: var(--accent-cyan);
+    border-color: var(--accent-cyan);
+    color: var(--bg-dark);
+    font-weight: 700;
+    box-shadow: 0 0 15px rgba(0, 212, 255, 0.6);
+}
+
+.target-btn.dead {
+    opacity: 0.3;
+    cursor: not-allowed;
+    background: rgba(255, 51, 102, 0.1);
+    border-color: rgba(255, 51, 102, 0.3);
+}
+
+.selected-target {
+    text-align: center;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1rem;
+    color: var(--accent-yellow);
+    padding: 10px;
+    background: rgba(255, 235, 59, 0.1);
+    border-radius: 6px;
+}
+
+.selected-target.has-target {
+    color: var(--accent-cyan);
+    background: rgba(0, 212, 255, 0.1);
+}
+
 /* Contribution Panel */
 .contribution-panel {
     display: none;
@@ -699,6 +773,10 @@ button:disabled {
                 <div class="project-stat-value" id="projectTotal">0</div>
             </div>
             <div class="project-stat">
+                <div class="project-stat-label">Available Seats</div>
+                <div class="project-stat-value" id="availableSeats">0</div>
+            </div>
+            <div class="project-stat">
                 <div class="project-stat-label">Current Leader</div>
                 <div class="project-stat-value" id="projectLeader">None</div>
             </div>
@@ -718,6 +796,16 @@ button:disabled {
     <!-- Human Action Panel -->
     <div class="human-action-panel" id="humanActionPanel">
         <div class="action-title">🎮 Your Turn - Choose Action</div>
+        
+        <!-- Target Selection -->
+        <div class="target-selection" id="targetSelection">
+            <div class="target-label">Select Target (for attacks only):</div>
+            <div class="target-buttons" id="targetButtons">
+                <!-- Target buttons will be dynamically generated -->
+            </div>
+            <div class="selected-target" id="selectedTargetDisplay">No target selected</div>
+        </div>
+        
         <div class="action-buttons">
             <button class="action-btn" onclick="submitAction('Produce')">
                 Produce
@@ -767,6 +855,64 @@ let updateInterval;
 let lastMessageCount = 0;
 let humanPlayerName = null;
 let contributionPanelInitialized = false;
+let selectedTarget = null;
+let targetButtonsInitialized = false;
+
+function selectTarget(targetName) {
+    selectedTarget = targetName;
+    
+    // Update UI to show selection
+    const targetButtons = document.querySelectorAll('.target-btn');
+    targetButtons.forEach(btn => {
+        if (btn.dataset.target === targetName) {
+            btn.classList.add('selected');
+        } else {
+            btn.classList.remove('selected');
+        }
+    });
+    
+    // Update display
+    const display = document.getElementById('selectedTargetDisplay');
+    display.textContent = `Target: ${targetName}`;
+    display.classList.add('has-target');
+}
+
+function updateTargetButtons(gameState) {
+    // Only initialize once when panel first appears
+    if (targetButtonsInitialized) {
+        return; // Don't reset if already initialized
+    }
+    
+    const targetButtonsContainer = document.getElementById('targetButtons');
+    targetButtonsContainer.innerHTML = '';
+    
+    // Get all agents except the human player
+    for (const agentName in gameState.agents) {
+        if (agentName === humanPlayerName) continue; // Skip self
+        
+        const agent = gameState.agents[agentName];
+        const btn = document.createElement('button');
+        btn.className = 'target-btn' + (agent.alive ? '' : ' dead');
+        btn.textContent = agentName;
+        btn.dataset.target = agentName;
+        
+        if (agent.alive) {
+            btn.onclick = () => selectTarget(agentName);
+        } else {
+            btn.disabled = true;
+        }
+        
+        targetButtonsContainer.appendChild(btn);
+    }
+    
+    // Reset selection display
+    selectedTarget = null;
+    const display = document.getElementById('selectedTargetDisplay');
+    display.textContent = 'No target selected';
+    display.classList.remove('has-target');
+    
+    targetButtonsInitialized = true;
+}
 
 function startGame() {
     const num_agents = document.getElementById('num_agents').value || 10;
@@ -783,6 +929,8 @@ function startGame() {
         document.getElementById('chat').innerHTML = '';
         lastMessageCount = 0;
         contributionPanelInitialized = false;
+        targetButtonsInitialized = false;
+        selectedTarget = null;
         document.getElementById('projectStats').style.display = 'block';
         updateInterval = setInterval(updateGame, 500);
     })
@@ -799,6 +947,8 @@ function stopGame() {
         document.getElementById('humanActionPanel').classList.remove('active');
         document.getElementById('contributionPanel').classList.remove('active');
         contributionPanelInitialized = false;
+        targetButtonsInitialized = false;
+        selectedTarget = null;
     })
     .catch(err => console.error('Error stopping game:', err));
 }
@@ -807,12 +957,17 @@ function submitAction(action) {
     fetch('http://localhost:5001/api/human_action', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({action})
+        body: JSON.stringify({
+            action: action,
+            target: selectedTarget  // Include the selected target
+        })
     })
     .then(r => r.json())
     .then(data => {
         console.log('Action submitted:', data);
         document.getElementById('humanActionPanel').classList.remove('active');
+        selectedTarget = null;  // Reset target after submission
+        targetButtonsInitialized = false;  // Reset flag for next turn
     })
     .catch(err => console.error('Error submitting action:', err));
 }
@@ -834,11 +989,14 @@ function submitContribution() {
     .catch(err => console.error('Error submitting contribution:', err));
 }
 
-function updateActionButtons(myStats) {
+function updateActionButtons(myStats, gameState) {
     // Enable/disable buttons based on resources
     document.getElementById('invadeBtn').disabled = myStats.influence < 1;
     document.getElementById('propagandizeBtn').disabled = myStats.resources < 1;
     document.getElementById('nukeBtn').disabled = myStats.resources < 8;
+    
+    // Update target selection buttons
+    updateTargetButtons(gameState);
 }
 
 function updateContributionPanel(myStats) {
@@ -892,11 +1050,15 @@ function updateGame() {
             statusDiv.className = 'status waiting';
             
             // Show human action panel
-            document.getElementById('humanActionPanel').classList.add('active');
+            const panel = document.getElementById('humanActionPanel');
+            if (!panel.classList.contains('active')) {
+                panel.classList.add('active');
+                targetButtonsInitialized = false; // Reset flag when showing panel
+            }
             
-            // Update button states
+            // Update button states and target selection
             if (data.agents[data.human_player]) {
-                updateActionButtons(data.agents[data.human_player]);
+                updateActionButtons(data.agents[data.human_player], data);
             }
         } else if (data.running) {
             statusDiv.textContent = `Turn ${data.turn}/${data.max_turns} - Battle in Progress`;
@@ -910,6 +1072,7 @@ function updateGame() {
 
         // Update project stats
         document.getElementById('projectTotal').textContent = data.project_total || 0;
+        document.getElementById('availableSeats').textContent = data.available_seats || 0;
         document.getElementById('projectLeader').textContent = data.project_leader || 'None';
 
         // Update agent stats
