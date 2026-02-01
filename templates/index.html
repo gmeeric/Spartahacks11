@@ -861,7 +861,6 @@ let targetButtonsInitialized = false;
 function selectTarget(targetName) {
     selectedTarget = targetName;
     
-    // Update UI to show selection
     const targetButtons = document.querySelectorAll('.target-btn');
     targetButtons.forEach(btn => {
         if (btn.dataset.target === targetName) {
@@ -871,24 +870,21 @@ function selectTarget(targetName) {
         }
     });
     
-    // Update display
     const display = document.getElementById('selectedTargetDisplay');
     display.textContent = `Target: ${targetName}`;
     display.classList.add('has-target');
 }
 
 function updateTargetButtons(gameState) {
-    // Only initialize once when panel first appears
     if (targetButtonsInitialized) {
-        return; // Don't reset if already initialized
+        return;
     }
     
     const targetButtonsContainer = document.getElementById('targetButtons');
     targetButtonsContainer.innerHTML = '';
     
-    // Get all agents except the human player
     for (const agentName in gameState.agents) {
-        if (agentName === humanPlayerName) continue; // Skip self
+        if (agentName === humanPlayerName) continue;
         
         const agent = gameState.agents[agentName];
         const btn = document.createElement('button');
@@ -905,7 +901,6 @@ function updateTargetButtons(gameState) {
         targetButtonsContainer.appendChild(btn);
     }
     
-    // Reset selection display
     selectedTarget = null;
     const display = document.getElementById('selectedTargetDisplay');
     display.textContent = 'No target selected';
@@ -918,7 +913,6 @@ function startGame() {
     const num_agents = document.getElementById('num_agents').value || 10;
     const include_human = document.getElementById('include_human').checked;
     
-    // Use relative URL for production (works with any domain)
     fetch('/api/start', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -991,19 +985,16 @@ function submitContribution() {
 }
 
 function updateActionButtons(myStats, gameState) {
-    // Enable/disable buttons based on resources
     document.getElementById('invadeBtn').disabled = myStats.influence < 1;
     document.getElementById('propagandizeBtn').disabled = myStats.resources < 1;
     document.getElementById('nukeBtn').disabled = myStats.resources < 8;
     
-    // Update target selection buttons
     updateTargetButtons(gameState);
 }
 
 function updateContributionPanel(myStats) {
     const slider = document.getElementById('contributionSlider');
     
-    // Only initialize once when panel first appears
     if (!contributionPanelInitialized) {
         slider.max = myStats.resources;
         slider.value = 0;
