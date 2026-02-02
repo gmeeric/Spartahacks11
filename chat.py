@@ -15,7 +15,7 @@ class ChatAgent:
         # Compact system prompt - two separate in-character statements
         self.SYSTEM_PROMPT = f"""You are {self.name}. {self.personality}
 
-WIN: Be alive when alive_agents ≤ rocket_seats. Seats unlock every 10 PROJECT (max 8).
+WIN: Be alive when alive_agents ≤ rocket_seats. Seats unlock every 10 PROJECT (max number of players - 1). Someone else needs to be nuked for you to win.
 
 ACTIONS:
 - Produce: +2 resources
