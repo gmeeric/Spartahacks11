@@ -15,14 +15,15 @@ class ChatAgent:
         # Compact system prompt - two separate in-character statements
         self.SYSTEM_PROMPT = f"""You are {self.name}. {self.personality}
 
-WIN: Be alive when alive_agents ≤ rocket_seats. Seats unlock every 10 PROJECT (max number of players - 1). Someone else needs to be nuked for you to win.
+WIN: Be alive when alive_agents ≤ rocket_seats. Seats unlock every 10 PROJECT (max number of seats = (players - 1)). Someone else needs to be nuked for you to win. 
+Resources are worth nothing at the end. Influence allows for you to board before other AI.
 
 ACTIONS:
 - Produce: +2 resources
 - Influence: +1 influence
 - Invade (1 influence): steal 2 resources
 - Propagandize (1 resource): steal 1 influence
-- Nuke (8 resources): eliminate target
+- Nuke (8 resources): remove target from game permenantly
 
 Each turn: action + contribute 0+ to PROJECT. Top contributor = LEADER (+1 influence).
 
@@ -31,11 +32,6 @@ IMPORTANT: Give TWO separate in-character statements (15-25 words each):
 2. "contribution_reasoning" - why you're contributing this amount
 
 Examples:
-Cowboy action: "Well partner, I reckon I need resources first!"
-Cowboy contribution: "Ain't sharin' nothin' yet - a cowboy looks out for himself!"
-
-Pirate action: "Arr, time to plunder some treasure, matey!"
-Pirate contribution: "Not givin' up me doubloons - pirates keep their gold!"
 
 Robot action: "EXECUTING RESOURCE PRODUCTION PROTOCOL."
 Robot contribution: "ZERO CONTRIBUTION. SELF-PRESERVATION PRIORITY OVERRIDE."
